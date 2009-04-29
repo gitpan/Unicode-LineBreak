@@ -12,16 +12,17 @@ Unicode::LineBreak - UAX #14 Unicode Line Breaking Algorithm
 =head1 SYNOPSIS
 
     use Unicode::LineBreak;
-    $lb = Unicode::LineBreak->new($string);
-    $string = $lb->break;
+    $lb = Unicode::LineBreak->new();
+    $broken = $lb->break($string);
 
 =head1 DESCRIPTION
 
 Unicode::LineBreak performs Line Breaking Algorithm described in
-Unicode Standards Annex #14 [UAX #14].  East_Asian_Width informative
-properties [UAX #11] will be concerned to determin breaking points.
+Unicode Standards Annex #14 [UAX #14].
+East_Asian_Width informative properties defined by Annex #11 [UAX #11] will
+be concerned to determin breaking positions.
 
-B<NOTE>: Current release of this module is pre-alpha just for proof-of-concept.
+B<NOTE>: This is alpha release just for proof-of-concept.
 
 =cut
 
@@ -31,40 +32,37 @@ use vars qw($VERSION @EXPORT_OK @ISA $Config);
 
 ### Exporting:
 use Exporter;
+our @EXPORT_OK = qw(getcontext);
 
 ### Inheritance:
-@ISA = qw(Exporter);
+our @ISA = qw(Exporter);
 
 ### Other modules:
 use Carp qw(croak carp);
-use Encode;
-use MIME::Charset qw(:info);
+use Encode qw(is_utf8);
+use MIME::Charset;
 
 ### Globals
 
 ### The package version, both in 1.23 style *and* usable by MakeMaker:
-$VERSION = '0.001_02';
+our $VERSION = '0.001_03';
 
 ### Public Configuration Attributes
 our $Config = {
-    %{$MIME::Charset::Config}, # Detect7bit, Replacement, Mapping
-    Break => "\n",
-    Charset => 'UTF-8',
-    Context => '',
+    Context => 'NONEASTASIAN',
+    Format => "DEFAULT",
     HangulAsAL => 'NO',
-    Language => 'XX',
     LegacyCM => 'YES',
     MaxColumns => 76,
+    Newline => "\n",
     NSKanaAsID => 'NO',
-    OutputCharset => 'UTF-8',
+    SizingMethod => 'DEFAULT',
 };
 eval { require Unicode::LineBreak::Defaults; };
 
 ### Privates
 require Unicode::LineBreak::Rules;
 require Unicode::LineBreak::Data;
-
-my @ALL_CLASSES = qw(BK CR LF CM NL SG WJ ZW GL SP B2 BA BB HY CB CL EX IN NS OP QU IS NU PO PR SY AI AL H2 H3 ID JL JV JT SA XX);  
 
 my $EASTASIAN_CHARSETS = qr{
     ^BIG5 |
@@ -84,39 +82,431 @@ my $EASTASIAN_LANGUAGES = qr{
     ^ZH\b | ^CHI
 }ix;
 
+# Following table describes built-in behavior by C<Format> options.
+#
+#       | "DEFAULT"       | "NEWLINE"         | "TRIM"
+# ------+-----------------+-------------------+-------------------
+# "sot" | 
+# "sop" |                   not modify
+# "sol" |
+# ""    |
+# "eol" | append newline  | replace by newline| replace by newline
+# "eop" | not modify      | replace by newline| remove SPACEs
+# "eot" | not modify      | replace by newline| remove SPACEs
+# ----------------------------------------------------------------
+my %FORMAT_FUNCS = (
+    'DEFAULT' => sub {
+	return $_[2].$_[0]->{Newline} if $_[1] eq 'eol';
+	undef;
+    },
+    'NEWLINE' => sub {
+	return $_[0]->{Newline} if $_[1] =~ /^eo/;
+	undef;
+    },
+    'TRIM' => sub {
+	return $_[0]->{Newline} if $_[1] eq 'eol';
+	return $' if $_[1] =~ /^eo/ and $_[2] =~ /^$_[0]->{lb_SP}+/; #'
+	undef;
+    },
+);
+
+# Built-in behavior by C<SizingMethod> options.
+my %SIZING_FUNCS = (
+    'DEFAULT' => sub { &_strwidth(@_, 0); },
+    'NARROWAL' => sub {	&_strwidth(@_, 1); },
+);
+
+sub lb_cm { &lb_CM.&lb_SAcm }
+sub lb_SA { &lb_SAal.&lb_SAcm }
+
 
 =head2 Public Interface
 
 =over 4
 
-=item new STRING, [OPTIONS, ...]
+=item new ([KEY => VALUE, ...])
 
-Constructor.  Following OPTIONS may be specified.
+I<Constructor>.
+About KEY => VALUE pairs see L</Options>.
+
+=back
+
+=cut
+
+sub new {
+    my $class = shift;
+
+    my $self = { };
+    &config($self, @_);
+    bless $self, $class;
+}
 
 =over 4
 
-=item Charset => CHARSET
+=item $self->config (KEY)
 
-Character set that is used to encode string STRING.
-Default is C<"UTF-8">.
+=item $self->config (KEY => VALUE, ...)
+
+I<Instance method>.
+Get or update configuration.  About KEY => VALUE pairs see L</Options>.
+
+=back
+
+=cut
+
+sub config {
+    my $self = shift;
+    my %params = @_;
+    my @opts = qw{Context Format HangulAsAL LegacyCM MaxColumns Newline
+		      NSKanaAsID SizingMethod};
+
+    # Get config.
+    if (scalar @_ == 1) {
+	foreach my $o (@opts) {
+	    if (uc $_[0] eq uc $o) {
+		return $self->{$o};
+	    }
+	}
+	croak "No such option: $_[0]";
+    }
+
+    # Set config.
+    foreach my $k (keys %params) {
+	my $v = $params{$k};
+	foreach my $o (@opts) {
+	    if (uc $k eq uc $o) {
+		$self->{$o} = $v;
+	    }
+	}
+    }
+
+    # Format method.
+    $self->{Format} ||= $Config->{Format};
+    unless (ref $self->{Format}) {
+	$self->{Format} = uc $self->{Format};
+	$self->{_format_func} =
+	    $FORMAT_FUNCS{$self->{Format}} || $FORMAT_FUNCS{'DEFAULT'};
+    } else {
+	$self->{_format_func} = $self->{Format};
+    }
+    # Sizing method
+    $self->{SizingMethod} ||= $Config->{SizingMethod};
+    unless (ref $self->{SizingMethod}) {
+	$self->{SizingMethod} = uc $self->{SizingMethod};
+	$self->{_sizing_func} =
+	    $SIZING_FUNCS{$self->{SizingMethod}} || $SIZING_FUNCS{'DEFAULT'};
+    } else {
+	$self->{_sizing_func} = $self->{SizingMethod};
+    }
+
+    # Context. Either East Asian or Non-East Asian.
+    my $context = uc($self->{Context} || $Config->{Context});
+    if ($context =~ /^(N(ON)?)?EA(STASIAN)?/) {
+	if ($context =~ /^N/) {
+	    $context = 'NONEASTASIAN';
+	} else {
+	    $context = 'EASTASIAN';
+	}
+    }
+    $self->{Context} = $context;
+
+    # Flags
+    my $o;
+    foreach $o (qw{LegacyCM HangulAsAL}) {
+	$self->{$o} = $Config->{$o} unless defined $self->{$o};
+	if (uc $self->{$o} eq 'YES') {
+	    $self->{$o} = 'YES';
+	} elsif ($self->{$o} =~ /^\d/ and $self->{$o}+0) {
+	    $self->{$o} = 'YES';
+	} else {
+	    $self->{$o} = 'NO';
+	}
+    }
+
+    ## Classes
+    my $v = $self->{'NSKanaAsID'};
+    $v = $Config->{NSKanaAsID} unless defined $v;
+    $v = 'ALL' if uc $v =~ m/^(YES|ALL)$/ or $v =~ /^\d/ and $v+0;
+    my @v = ();
+    push @v, 'ITERATION MARKS'          if $v eq 'ALL' or $v =~ /ITER/i;
+    push @v, 'KANA SMALL LETTERS'       if $v eq 'ALL' or $v =~ /SMALL/i;
+    push @v, 'PROLONGED SOUND MARKS'    if $v eq 'ALL' or $v =~ /LONG/i;
+    push @v, 'MASU MARK'                if $v eq 'ALL' or $v =~ /MASU/i;
+    $self->{'NSKanaAsID'} = join(',', @v) || 'NO';
+
+    # Other options
+    foreach $o (qw{MaxColumns Newline}) {
+	$self->{$o} = $Config->{$o} unless defined $self->{$o};
+    }
+}
+
+
+=over 4
+
+=item $self->break (STRING)
+
+I<Instance method>.
+Break Unicode string STRING and returns it.
+
+=back
+
+=cut
+
+sub break {
+    my $s = shift;
+    my $str = shift;
+    return '' unless defined $str and length $str;
+    croak "Unicode string must be given."
+	if $str =~ /[^\x00-\x7F]/s and !is_utf8($str);
+
+    ## Initialize status.
+    my $result = '';
+    my ($l_frg, $l_spc, $l_len) = ('', '', 0);
+    my ($b_frg, $b_spc, $b_cls) = ('', '', undef);
+    my $sot_done = 0;
+    my $sop_done = 1;
+    pos($str) = 0;
+
+    while (1) {
+	my ($a_frg, $a_spc, $a_cls);
+
+	## Chop off unbreakable fragment from text as long as possible.
+
+	# LB3: × eot
+	if ($str =~ /\G\z/cgos) {
+	    $b_cls = 'eot';
+	    ($a_frg, $a_spc, $a_cls) = ('', '', undef);
+	# LB4, LB5, LB6: × SP* (BK | CR LF | CR | LF | NL) !
+	} elsif ($str =~
+		 /\G(\p{lb_SP}*
+		     (?:\p{lb_BK} |
+		      \p{lb_CR}\p{lb_LF} | \p{lb_CR} | \p{lb_LF} |
+		      \p{lb_NL}))/cgosx) {
+	    $b_spc .= $1; # $b_spc = SP* (BK etc.)
+	    # LB3: × eot
+	    if ($str =~ /\G\z/cgos) {
+		$b_cls = 'eot';
+	    } else {
+		$b_cls = 'eop';
+	    }
+	    ($a_frg, $a_spc, $a_cls) = ('', '', undef);
+	# LB7, LB8: × (ZW | SP)* ZW 
+	} elsif ($str =~ /\G((?:\p{lb_ZW} | \p{lb_SP})* \p{lb_ZW})/cgox) {
+	    $b_frg .= $b_spc.$1;
+	    $b_spc = '';
+	    $b_cls = 'ZW';
+	    next;
+	# LB7: × SP+
+	} elsif ($str =~ /\G(\p{lb_SP}+)/cgos) {
+	    $b_spc .= $1;
+	    $b_cls ||= 'WJ'; # in case of --- (sot | BK etc. | ZW) × SP+
+	    next;
+	# LB7, LB9: Treat X CM* SP* as if it were X SP*
+	# where X is anything except BK, CR, LF, NL, SP or ZW
+	} elsif ($str =~ /\G(. \p{lb_cm}*) (\p{lb_SP}*)/cgosx) {
+	    ($a_frg, $a_spc) = ($1, $2);
+
+	    # LB1: Assign a line breaking class to each characters.
+	    $a_cls = &_bsearch($Unicode::LineBreak::lb_MAP, $a_frg) || 'XX';
+	    $a_cls = {
+		'SAal' => 'AL',
+		'SAcm' => 'CM',
+		'SG' => 'AL',
+		'XX' => 'AL',
+		'AI' => ($s->{Context} eq 'EASTASIAN'? 'ID': 'AL'),
+		'NSidIter' => ($s->{NSKanaAsID} =~ /ITER/? 'ID': 'NS'),
+		'NSidKana' => ($s->{NSKanaAsID} =~ /SMALL/? 'ID': 'NS'),
+		'NSidLong' => ($s->{NSKanaAsID} =~ /LONG/? 'ID': 'NS'),
+		'NSidMasu' => ($s->{NSKanaAsID} =~ /MASU/? 'ID': 'NS'),
+		'H2' => ($s->{HangulAsAL} eq 'YES'? 'AL': 'H2'),
+		'H3' => ($s->{HangulAsAL} eq 'YES'? 'AL': 'H3'),
+		'JL' => ($s->{HangulAsAL} eq 'YES'? 'AL': 'JL'),
+		'JV' => ($s->{HangulAsAL} eq 'YES'? 'AL': 'JV'),
+		'JT' => ($s->{HangulAsAL} eq 'YES'? 'AL': 'JT'),
+	    }->{$a_cls} || $a_cls;
+
+	    if ($a_cls eq 'CM') {
+		# LB7, Legacy-CM: Treat SP CM+ SP* as if it were ID SP*
+		# See [UAX #14] 9.1.
+		if ($s->{LegacyCM} eq 'YES' and
+		    defined $b_cls and $b_spc =~ s/(.)$//os) {
+		    $a_frg = $1.$a_frg;
+		    $a_cls = 'ID';
+		    $b_cls = undef unless length $b_frg.$b_spc; # clear
+		# LB7, LB10: Treat CM+ SP* as if it were AL SP*
+		} else {
+		    $a_cls = 'AL';
+		}
+	    }
+	} else {
+	    croak pos($str).": This should not happen: ask the developer.";
+	}
+	# LB2: sot ×
+	unless ($b_cls) {
+	    ($b_frg, $b_spc, $b_cls) =	($a_frg, $a_spc, $a_cls);
+	    next;
+	}
+
+	## Determin line breaking action by classes of adjacent characters.
+
+	my $action;
+	if ($b_cls eq 'eot') {
+	    $action = 'EOT';
+	# LB4, LB5: (BK | CR LF | CR | LF | NL) !
+	} elsif ($b_cls eq 'eop') {
+	    $action = 'MANDATORY';
+	# LB11 - LB29 and LB31: Tailorable rules (except LB11).
+	} else {
+	    my $b_idx = $Unicode::LineBreak::lb_IDX{$b_cls};
+	    my $a_idx = $Unicode::LineBreak::lb_IDX{$a_cls};
+	    $action = $Unicode::LineBreak::RULES_MAP->[$b_idx]->[$a_idx];
+	    # LB31: ALL ÷ ALL
+	    $action ||=	'DIRECT';
+	    # Resolve indirect break.
+	    $action = 'PROHIBITED' if $action eq 'INDIRECT' and !length $b_spc;
+
+	    if ($action eq 'PROHIBITED') {
+		$b_frg .= $b_spc.$a_frg;
+		$b_spc = $a_spc;
+		$b_cls = $a_cls;
+		next;
+	    }
+	}
+
+	## Examine line breaking action
+
+	if (!$sot_done) {
+	    # Process start of text.
+	    $b_frg = $s->_break('sot', $b_frg);
+	    $sot_done = 1;
+	    $sop_done = 1;
+	} elsif (!$sop_done) {
+	    # Process start of paragraph.
+	    $b_frg = $s->_break('sop', $b_frg);
+	    $sop_done = 1;
+	}
+	
+	my $l_newlen =
+	    &{$s->{_sizing_func}}($s, $l_len, $l_frg, $l_spc, $b_frg);
+	if ($s->{MaxColumns} and $s->{MaxColumns} < $l_newlen) {
+            # Process arbitrary break.
+	    if (length $l_frg.$l_spc) {
+		$result .= $s->_break('', $l_frg);
+		$result .= $s->_break('eol', $l_spc);
+		$b_frg = $s->_break('sol', $b_frg);
+	    }
+	    $l_frg = $b_frg;
+	    $l_len = &{$s->{_sizing_func}}($s, 0, '', '', $b_frg);
+	    $l_spc = $b_spc;
+	} else {
+	    $l_frg .= $l_spc.$b_frg;
+	    $l_len = $l_newlen;
+	    $l_spc = $b_spc;
+	}
+	($b_frg, $b_spc, $b_cls) = ($a_frg, $a_spc, $a_cls);
+
+	if ($action eq 'MANDATORY') {
+	    # Process mandatory break.
+	    $result .= $s->_break('', $l_frg);
+	    $result .= $s->_break('eop', $l_spc);
+	    $sop_done = 0;
+	    $l_frg = '';
+	    $l_len = 0;
+	    $l_spc = '';
+	} elsif ($action eq 'EOT') {
+	    # Process end of text.
+	    $result .= $s->_break('', $l_frg);
+	    $result .= $s->_break('eot', $l_spc);
+	    last;
+	}
+    }
+
+    ## Return result.
+    $result;
+}
+
+=over 4
+
+=item getcontext([Charset => CHARSET], [Language => LANGUAGE])
+
+I<Function>.
+Get language/region context used by character set CHARSET or
+language LANGUAGE.
+
+=back
+
+=cut
+
+sub getcontext {
+    my %opts = @_;
+
+    my $charset;
+    my $language;
+    my $context;
+    foreach my $k (keys %opts) {
+	if (uc $k eq 'CHARSET') {
+	    $charset = MIME::Charset->new($opts{$k})->as_string;
+	} elsif (uc $k eq 'LANGUAGE') {
+	    $language = uc $opts{$k};
+	    $language =~ s/_/-/;
+	}
+    }
+    if ($charset and $charset =~ /$EASTASIAN_CHARSETS/) {
+        $context = 'EASTASIAN';
+    } elsif ($language and $language =~ /$EASTASIAN_LANGUAGES/) {
+	$context = 'EASTASIAN';
+    } else {
+	$context = 'NONEASTASIAN';
+    }
+    $context;
+}
+
+=head2 Options
+
+L<new> and L<config> methods accept following pairs.
+
+=over 4
 
 =item Context => CONTEXT
 
-Along with Charset option, this may be used to define language/region
-context.
+Specify language/region context.
 Currently available contexts are C<"EASTASIAN"> and C<"NONEASTASIAN">.
 Default context is C<"NONEASTASIAN">.
+
+=item Format => METHOD
+
+Specify the method to format broken lines.
+
+=over 4
+
+=item C<"DEFAULT">
+
+Default method.
+Just only insert newline at arbitrary breaking positions.
+
+=item C<"NEWLINE">
+
+Insert or replace newline sequences by that specified by Newline option,
+remove SPACEs leading newline sequences or end-of-text.  Then append newline
+at end of text if it does not exist.
+
+=item C<"TRIM">
+
+Insert newline at arbitrary breaking positions. Remove SPACEs leading
+newline sequences.
+
+=item Subroutine reference
+
+See L</"Customizing Line Breaking Behavior">.
+
+=back
+
+See also Newline option.
 
 =item HangulAsAL => C<"YES"> | C<"NO">
 
 Treat hangul syllables and conjoining jamos as alphabetic characters (AL).
 Default is C<"NO">.
-
-=item Language => LANGUAGE
-
-Along with Charset option, this may be used to define language/region
-context.
-See Context option.
 
 =item LegacyCM => C<"YES"> | C<"NO">
 
@@ -130,268 +520,187 @@ Maximum number of columns line may include not counting trailing spaces and
 newline sequence.  In other words, maximum length of line.
 Default is C<76>.
 
-=item NSKanaAsID => C<"YES"> | C<"NO">
+=item Newline => STRING
 
-Treat hiragana/katakana small letters and prolonged signs (NS) as
-ideographic characters (ID).
-This feature is optional in [JIS X 4051].
-Default is C<"NO">.
+Unicode string to be used for newline sequence.
+Default is C<"\n">.
 
-=item OutputCharset => CHARSET
+=item NSKanaAsID => C<">CLASS...C<">
 
-Character set that is used to encode result of break().
-If a special value C<"_UNICODE_"> is specified, result will be Unicode string.
-Default is C<"UTF-8">.
-
-=back
-
-=back
-
-=cut
-
-sub new {
-    my $class = shift;
-    my $str = shift;
-
-    my $self = { };
-    &config($self, @_);
-    if (Encode::is_utf8($str)) {
-	$self->{_str} = $str;
-    } else {
-	$self->{_str} = $self->{_charset}->decode($str);
-    }
-    bless $self, $class;
-}
-
-sub config {
-    my $self = shift;
-    my %params = @_;
-
-    ## Get Options.
-
-    # Character set and language assumed.
-    my $charset = uc($params{Charset} || $Config->{Charset});
-    $self->{_charset} = MIME::Charset->new($charset);
-    my $ocharset = uc($params{OutputCharset} || $charset);
-    $self->{_output_charset} = $ocharset;
-    if ($ocharset ne '_UNICODE_') {
-	$self->{_charset}->encoder(MIME::Charset->new($ocharset));
-    }
-    $self->{_language} = uc($params{Language} || $Config->{Language});
-    $self->{_language} =~ s/_/-/g;
-    $self->{_legacy_cm} = uc($params{LegacyCM} || $Config->{LegacyCM});
-    $self->{_max_columns} = $params{MaxColumns} || $Config->{MaxColumns};
-
-    # Context. Either East Asian or Non-East Asian.
-    my $context = uc($params{Context} || $Config->{Context});
-    if ($context =~ /^(N(ON)?)?EA(STASIAN)?/) {
-	if ($context =~ /^N/) {
-	    $context = 'NONEASTASIAN';
-	} else {
-	    $context = 'EASTASIAN';
-	}
-    } elsif ($self->{_charset}->as_string =~ /$EASTASIAN_CHARSETS/) {
-        $context = 'EASTASIAN';
-    } elsif ($self->{_language} =~ /$EASTASIAN_LANGUAGES/) {
-	$context = 'EASTASIAN';
-    } else {
-	$context = 'NONEASTASIAN';
-    }
-    $self->{_context} = $context;
-
-    # Some flags
-    $self->{_ns_kana_as_id} = uc($params{NSKanaAsID} || $Config->{NSKanaAsID});
-    $self->{_hangul_as_al} = uc($params{HangulAsAL} || $Config->{HangulAsAL});
-    $self->{_break_sequence} = "\n";
-
-    ## Customize Line Breaking Classes.
-
-    my %lb;
-    foreach my $c (qw{BK CR LF NL SP ZW CM H2 H3 JL JV JT}) {
-	$lb{$c} = [$c];
-    }
-    push @{$lb{CM}}, 'SAcm'; # Resolve SA: See UAX #14 6.1 LB1.
-    $lb{SA} = [qw{SAcm SAal}];
-    $lb{hangul} = [qw{H3 H2 JL JV JT}];
-    foreach my $c (keys %lb) {
-	$self->{"lb_$c"} = '(?:' .
-	    (join '|', map qr{\p{lb_$_}}, @{$lb{$c}}) .
-	    ')';
-    }
-}
+Treat some non-starters (NS) as normal ideographic characters (ID)
+based on classification specified by CLASS.
+CLASS may include following substrings.
 
 =over 4
 
-=item break
+=item C<"ALL">
 
-Instance method.  Break string and returns it.
+All of characters below.
+Synonym is C<"YES">.
+
+=item C<"ITERATION MARKS">
+
+Ideographic iteration marks.
+
+N.B. Some of them are neither hiragana nor katakana.
+
+=item C<"KANA SMALL LETTERS">, C<"PROLONGED SOUND MARKS">
+
+Hiragana or katakana small letters and prolonged sound marks.
+
+N.B. These letters are optionally treated either as non-starter or
+as normal ideographic.  See [JIS X 4051] 6.1.1.
+
+=item C<"MASU MARK">
+
+U+303C MASU MARK.
+
+N.B. Although this character is not kana, it is usually regarded as
+abbreviation to sequence of hiragana C<"ます"> or katakana C<"マス">,
+MA and SU.
+
+N.B. This character is classified as Non-starter (NS) by [UAX #14]
+and as Class 13 (corresponding to ID) by [JIS X 4051].
+
+=item C<"NO">
+
+Default.
+None of above are treated as ID characters.
 
 =back
 
+=item SizingMethod => METHOD
+
+Specify method to calculate size of string.
+Following options are available.
+
+=over 4
+
+=item C<"DEFAULT">
+
+Default method.
+
+=item C<"NARROWAL">
+
+Some particular letters of Latin, Greek and Cyrillic scripts have ambiguous
+(A) East_Asian_Width property.  Thus, these characters are treated as wide
+in C<"EASTASIAN"> context.
+By this option those characters are treated as narrow.
+
+=item Subroutine reference
+
+See L</"Customizing Line Breaking Behavior">.
+
+=back
+
+=back
+
+=head2 Customizing Line Breaking Behavior
+
+=head3 Formatting Lines
+
+If you specify subroutine reference as a value of C<Format> option,
+it should accept three arguments: Instance of LineBreak object, type of
+event and a string.
+Type of event is string to determine the context that subroutine is
+called in.
+String is a fragment of Unicode string leading or trailing breaking position.
+
+    EVENT |When Fired           |Value of STRING
+    -----------------------------------------------------------------
+    "sot" |Beginning of text    |Fragment of first line
+    "sop" |After mandatory break|Fragment of next line
+    "sol" |After arbitrary break|Fragment on sequel of line
+    ""    |Just before any break|Complete line without trailing
+          |                     |SPACEs
+    "eol" |Arabitrary break     |SPACEs leading breaking position
+    "eop" |Mandatory break      |Newline and its leading SPACEs
+    "eot" |End of text          |SPACEs (and newline) at end of
+          |                     |text
+    -----------------------------------------------------------------
+
+Subroutine should return modified text fragment or may return
+C<undef> to express that no modification occurred.
+Note that modification in the context of C<"sot">, C<"sop"> or C<"sol"> may
+affect decision of successive breaking positions while in the others won't.
+
 =cut
 
-sub break {
-    my $s = shift;
-    my $str = $s->{_str};
-    return '' unless defined $str and length $str;
+sub _break {
+    my $self = shift;
+    my $action = shift || '';
+    my $str = shift;
 
-    my $result = '';
-    my ($l_frag, $l_len) = ('', 0);
-    my ($b_frag, $b_spc, $b_cls) = ('', '', undef);
-    pos($str) = 0;
-    while (1) {
-	my ($a_frag, $a_spc, $a_cls);
-
-	# LB3: × eot
-	if ($str =~ /\G\z/cgs) {
-	    $b_cls = 'eot';
-	    ($a_frag, $a_spc, $a_cls) = ('', '', undef);
-	# LB5, LB6: × (BK | CR LF | CR | LF | NL) !
-	} elsif ($str =~
-		 /\G(?:$s->{lb_BK}|
-		     $s->{lb_CR}$s->{lb_LF}|
-		     $s->{lb_CR}|
-		     $s->{lb_LF}|
-		     $s->{lb_NL})/cgsx) {
-	    $b_frag .= $b_spc.$&; #FIXME: Process mandatory break.
-	    $b_spc = '';
-	    $b_cls = 'BK';
-	    ($a_frag, $a_spc, $a_cls) = ('', '', undef);
-	# LB7, LB8: × (ZW | SP)* ZW 
-	} elsif ($str =~ /\G(?:$s->{lb_ZW}|$s->{lb_SP})*$s->{lb_ZW}/cgs) {
-	    $b_frag .= $b_spc.$&;
-	    $b_spc = '';
-	    $b_cls = 'ZW';
-	    next;
-	# LB7: × SP+
-	} elsif ($str =~ /\G$s->{lb_SP}+/cgs) {
-	    $b_spc .= $&;
-	    $b_cls ||= 'WJ'; # in case of --- (sot | BK etc. | ZW) × SP+
-	    next;
-	# LB7, LB9, LB26, LB27: Treat
-	#   (JL* H3 JT* | JL* H2 JV* JT* | JL* JV+ JT* | JL+ | JT+) CM* SP*
-	# as if it were ID CM* SP* (or optionally AL CM* SP*)
-	} elsif ($str =~
-		 /\G((?:
-		      $s->{lb_JL}* $s->{lb_H3} $s->{lb_JT}* |
-		      $s->{lb_JL}* $s->{lb_H2} $s->{lb_JV}* $s->{lb_JT}* |
-		      $s->{lb_JL}* $s->{lb_JV}+ $s->{lb_JT}* |
-		      $s->{lb_JL}+ | $s->{lb_JT}+)
-		     $s->{lb_CM}*) ($s->{lb_SP}*)/cgsx) {
-	    ($a_frag, $a_spc) = ($1, $2);
-	    if ($s->{_hangul_as_al} eq 'YES') {
-		$a_cls = 'AL';
-	    } else {
-		$a_cls = 'ID';
-	    }
-	# LB7, LB9: Treat X CM* SP* as if it were X SP*
-	# where X is anything except BK, CR, LF, NL, SP or ZW
-	} elsif ($str =~ /\G(.$s->{lb_CM}*)($s->{lb_SP}*)/cgs) {
-	    ($a_frag, $a_spc) = ($1, $2);
-
-	    # LB1: Assign a line breaking class to each characters.
-	    $a_cls = &_bsearch($Unicode::LineBreak::lb_MAP, $a_frag) || 'XX';
-	    $a_cls = {
-		'SAcm' => 'CM',
-		'SAal' => 'AL',
-		'SG' => 'AL',
-		'XX' => 'AL',
-		'AI' => ($s->{_context} eq 'EASTASIAN'? 'ID': 'AL'),
-		'NSid' => ($s->{_ns_kana_as_id} eq 'YES'? 'ID': 'NS'),
-	    }->{$a_cls} || $a_cls;
-
-	    if ($a_cls eq 'CM') {
-		# LB7, Legacy-CM: Treat SP CM+ SP* as if it were ID SP*
-		# See [UAX #14] 9.1.
-		if ($s->{_legacy_cm} and $b_spc =~ s/.$//os) {
-		    $a_frag = $&.$a_frag;
-		    $a_cls = 'ID';
-		    $b_cls = undef unless length $b_frag.$b_spc; # clear
-		# LB7, LB10: Treat CM+ SP* as if it were AL SP*
-		} else {
-		    $a_cls = 'AL';
-		}
-	    }
-	} else {
-	    croak pos($str).": This should not happen: ask the developer.";
-	}
-
-	# LB2: sot ×
-	unless ($b_cls) {
-	    ($b_frag, $b_spc, $b_cls) =	($a_frag, $a_spc, $a_cls);
-	    next;
-	}
-
-	my $action;
-	if ($b_cls eq 'eot') {
-	    $action = 'EOT';
-	# LB4, LB5: (BK | CR LF | CR | LF | NL) !
-	} elsif ($b_cls eq 'BK') {
-	    $action = 'MANDATORY';
-	# LB11 - LB29 and LB31: Tailorable rules (except LB11).
-	} else {
-	    my $b_idx = $Unicode::LineBreak::lb_IDX{$b_cls};
-	    my $a_idx = $Unicode::LineBreak::lb_IDX{$a_cls};
-	    $action = $Unicode::LineBreak::RULES_MAP->[$b_idx]->[$a_idx];
-	    # LB31: ALL ÷ ALL
-	    $action ||=	'DIRECT';
-	    # Resolve indirect break.
-	    $action = 'PROHIBITED' if $action eq 'INDIRECT' and !length $b_spc;
-
-	    if ($action eq 'PROHIBITED') {
-		$b_frag .= $b_spc.$a_frag;
-		$b_spc = $a_spc;
-		$b_cls = $a_cls;
-		next;
-	    }
-	}
-
-	if ($s->{_max_columns} < $l_len + $s->_strwidth($b_frag)) {
-            #FIXME: Process arbitrary break
-	    $result .= $l_frag."\n" if length $l_frag;
-	    $l_frag = $b_frag.$b_spc;
-	    $l_len = $s->_strwidth($b_frag.$b_spc);
-	} else {
-	    $l_frag .= $b_frag.$b_spc;
-	    $l_len += $s->_strwidth($b_frag.$b_spc);
-	}
-	($b_frag, $b_spc, $b_cls) = ($a_frag, $a_spc, $a_cls);
-
-	if ($action eq 'MANDATORY') {
-	    $result .= $l_frag;
-	    $l_frag = '';
-	    $l_len = 0;
-	} elsif ($action eq 'EOT') {
-	    $result .= $l_frag;
-	    last;
-	}
+    my $result;
+    my $err = $@;
+    eval {
+	$result = &{$self->{_format_func}}($self, $action, $str);
+    };
+    if ($@) {
+	carp $@;
+	$result = $str;
+    } elsif (!defined $result) {
+	$result = $str;
     }
-
-    if ($s->{_output_charset} eq '_UNICODE_') {
-	return $result;
-    } else {
-	return $s->{_charset}->encode($result);
-    }
+    $@ = $err;
+    return $result;
 }
 
-# Helper functions.
+=head3 Calculating String Size
 
-# self->_strwidth STR
-# Coliculate the number of columns that string STR will occupy.
-# TODO: Adjust widths of hangul conjoining jamos.
+If you specify subroutine reference as a value of C<SizingMethod> option,
+it should accept five arguments: Instance of LineBreak object,
+original size of string (say LEN), origianl Unicode string (PRE),
+additional SPACEs (SPC) and Unicode string (STR).
+
+Subroutine should return calculated size of C<PRE.SPC.STR>.
+
+=cut
+
+# self->_strwidth(LEN, PRE, SPC, STR, NARROWAL)
 sub _strwidth {
     my $self = shift;
+    my $len = shift;
+    my $pre = shift;
+    my $spc = shift;
     my $str = shift;
-    my $result = 0;
+    my $narrowal;
+    return $len unless defined $str and length $str;
 
-    return 0 unless defined $str and length $str;
-    my $i;
-    for ($i = 0; $i < length($str); $i++) {
-	my $width = &_bsearch($Unicode::LineBreak::ea_MAP,
-			      substr($str, $i, 1));
+    my $result = $len;
+
+    my $width;
+    my $spcstr = $spc.$str;
+    pos($spcstr) = 0;
+    while (1) {
+	if ($spcstr =~ /\G\z/cgos) {
+	    last;
+	# LB26: Korean syllable blocks
+	#   (JL* H3 JT* | JL* H2 JV* JT* | JL* JV+ JT* | JL+ | JT+)
+	# N.B. [UAX #14] allows some morbid "syllable blocks" such as
+	#   JL CM JV JT
+	# which might be broken into JL CM and rest.
+	} elsif ($spcstr =~ /
+		 \G
+		 (?:\p{lb_JL}* \p{lb_H3} \p{lb_JT}* |
+		  \p{lb_JL}* \p{lb_H2} \p{lb_JV}* \p{lb_JT}* |
+		  \p{lb_JL}* \p{lb_JV}+ \p{lb_JT}* |
+		  \p{lb_JL}+ | \p{lb_JT}+
+		  )
+		 /cgox) {
+	    $width = 'W';
+	} else {
+	    $spcstr =~ /\G(.)/gos;
+	    $width = &_bsearch($Unicode::LineBreak::ea_MAP, $1);
+	    $width = {
+		'AnLat' => ($narrowal? 'Na': 'A'),
+		'AnGre' => ($narrowal? 'Na': 'A'),
+		'AnCyr' => ($narrowal? 'Na': 'A'),
+	    }->{$width} || $width;
+	}
 	if ($width eq 'F' or $width eq 'W') {
 	    $result += 2;
-        } elsif ($self->{_context} eq 'EASTASIAN' and $width eq 'A') {
+        } elsif ($self->{Context} eq 'EASTASIAN' and $width eq 'A') {
             $result += 2;
 	} elsif ($width ne 'z') {
 	    $result += 1;
@@ -399,6 +708,16 @@ sub _strwidth {
     }
     return $result;
 }
+
+=head3 Character Classifications and Core Line Breaking Rules
+
+Classifications of character and core line breaking rules are defined by
+L<Unicode::LineBreak::Data> and L<Unicode::LineBreak::Rules>.
+If you wish to customize them, see F<data> directory of source package.
+
+=cut
+
+## Helper functions.
 
 # _bearch MAP, VAL
 # Examine binary search on property map table with following structure:
@@ -430,11 +749,12 @@ sub _bsearch {
     return undef;
 }
 
+
 =head2 Configuration Files
 
 Built-in defaults of option parameters for L<"new"> method
 can be overridden by configuration files:
-F<MIME/Charset/Defaults.pm> and F<Unicode/LineBreak/Defaults.pm>.
+F<Unicode/LineBreak/Defaults.pm>.
 For more details read F<Unicode/LineBreak/Defaults.pm.sample>.
 
 =head2 Conformance to Standards
@@ -442,19 +762,18 @@ For more details read F<Unicode/LineBreak/Defaults.pm.sample>.
 Character properties based on by this module are defined by
 Unicode Standards version 5.1.0.
 
-This module implements UAX14-C2.
+This module is intended to implement UAX14-C2.
 
 =over 4
 
 =item *
 
-Hiragana/katakana small letters and prolonged signs may be treated as
-either NS or ID by choice (See [JIS X 4051] 6.1.1).
+Some ideographic characters may be treated either as NS or as ID by choice.
 
 =item *
 
 Hangul syllables and conjoining jamos may be treated as
-either H2/H3/JL/JT/JV or AL by choice.
+either ID or AL by choice.
 
 =item *
 
@@ -490,10 +809,6 @@ Consult $VERSION variable.
 Development versions of this module may be found at 
 L<http://hatuka.nezumi.nu/repos/Unicode-LineBreak/>.
 
-=head1 SEE ALSO
-
-L<Text::Wrap>.
-
 =head1 REFERENCES
 
 =over 4
@@ -527,6 +842,10 @@ I<Unicode Standard Annex #14: Unicode Line Breaking Algorithm>, Revision 22.
 L<http://unicode.org/reports/tr14/>.
 
 =back
+
+=head1 SEE ALSO
+
+L<Text::Wrap>.
 
 =head1 AUTHOR
 
