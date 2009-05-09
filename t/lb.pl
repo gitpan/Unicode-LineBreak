@@ -3,17 +3,18 @@ use Encode qw(decode_utf8 encode_utf8);
 use Unicode::LineBreak;
 
 $Unicode::LineBreak::Config = {
-    Detect7bit => 'YES',
-    Mapping => 'EXTENDED',
-    Replacement => 'DEFAULT',
-    Context => '',
+    CharactersMax => 998,
+    ColumnsMin => 0,
+    ColumnsMax => 76,
+    Context => 'NONEASTASIAN',
     Format => 'DEFAULT',
     HangulAsAL => 'NO',
     LegacyCM => "YES",
-    MaxColumns => 76,
     Newline => "\n",
     NSKanaAsID => "NO",
     SizingMethod => "DEFAULT",
+    UrgentBreaking => 'NONBREAK',
+    UserBreaking => [],
 };
 
 sub dotest {
@@ -25,13 +26,16 @@ sub dotest {
     close IN;
     my $lb = Unicode::LineBreak->new(@_);
     my $broken = encode_utf8($lb->break($instring));
-    #open XXX, ">testin/$out.xxx";
-    #print XXX $broken;
-    #close XXX;
 
-    open OUT, "<testin/$out.out" or die "open: $!";
-    my $outstring = join '', <OUT>;
-    close OUT;
+    my $outstring = '';
+    if (open OUT, "<testin/$out.out") {
+	$outstring = join '', <OUT>;
+	close OUT;
+    } else {
+	open XXX, ">testin/$out.xxx";
+	print XXX $broken;
+	close XXX;
+    }
 
     is($broken, $outstring);
 }    
