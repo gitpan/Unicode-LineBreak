@@ -2,55 +2,45 @@
 #include "perl.h"
 #include "XSUB.h"
 #include "ppport.h"
-#ifdef USE_LIBTHAI
-#    include "thai/thwchar.h"
-#    include "thai/thwbrk.h"
-#endif /* USE_LIBTHAI */
+#include "linebreak.h"
 
-#define PROP_UNKNOWN ((propval_t)~0)
+extern char *linebreak_unicode_version;
+extern mapent_t linebreak_lbmap[];
+extern size_t linebreak_lbmapsiz;
+extern const unsigned short linebreak_lbhash[];
+extern const unsigned short linebreak_lbhashidx[];
+extern size_t linebreak_lbhashsiz;
+extern mapent_t linebreak_eamap[];
+extern size_t linebreak_eamapsiz;
+extern const unsigned short linebreak_eahash[];
+extern const unsigned short linebreak_eahashidx[];
+extern size_t linebreak_eahashsiz;
+extern mapent_t linebreak_scriptmap[];
+extern size_t linebreak_scriptmapsiz;
+extern propval_t linebreak_rulemap[32][32];
+extern size_t linebreak_rulemapsiz;
 
-typedef unsigned int unichar_t;
-typedef size_t propval_t;
-
-typedef struct {
-    unichar_t *str;
-    size_t len;
-} unistr_t;
-
-typedef struct {
-    unichar_t beg;
-    unichar_t end;
-    propval_t prop;
-} mapent_t;
-
-typedef struct {
-    mapent_t *lbmap;
-    size_t lbmapsiz;
-    mapent_t *eamap;
-    size_t eamapsiz;
-    unsigned int options;
-} linebreakObj;
-#define LINEBREAK_OPTION_EASTASIAN_CONTEXT (1)
-
-static propval_t LB_BK, LB_CR, LB_LF, LB_NL, LB_SP, LB_ZW, LB_WJ,
-    LB_AL, LB_CM, LB_ID,
-    LB_H2, LB_H3, LB_JL, LB_JV, LB_JT,
-    LB_AI, LB_SA, LB_SG, LB_XX,
-    LB_SAprepend, LB_SAbase, LB_SAextend;
-static propval_t EA_Z, EA_N, EA_A, EA_W, EA_F;
-#ifdef USE_LIBTHAI
-static propval_t SCRIPT_Thai;
-#endif /* USE_LIBTHAI */
-static propval_t DIRECT;
-
-static mapent_t *lbmap = NULL;
-static size_t lbmapsiz = 0;
-static mapent_t *eamap = NULL;
-static size_t eamapsiz = 0;
-static mapent_t *scriptmap = NULL;
-static size_t scriptmapsiz = 0;
-static propval_t **rulemap = NULL;
-static size_t rulemapsiz = 0;
+#define HASH_MODULUS (1U << 11)
+#define isCJKIdeograph(c) \
+	( (0x3400 <= (c) && (c) <= 0x4DBF) ||	\
+	  (0x4E00 <= (c) && (c) <= 0x9FFF) ||	\
+	  (0xF900 <= (c) && (c) <= 0xFAFF) ||	\
+	  (0x20000 <= (c) && (c) <= 0x2FFFD) ||	\
+	  (0x30000 <= (c) && (c) <= 0x3FFFD) )
+#define isHangulSyllable(c) \
+	(0xAC00 <= (c) && (c) <= 0xD7A3)
+#define isPrivateUse(c) \
+	( (0xE000 <= (c) && (c) <= 0xF8FF) ||	\
+	  (0xF0000 <= (c) && (c) <= 0xFFFFD) ||	\
+	  (0x100000 <= (c) && (c) <= 0x10FFFD) )
+#define isTag(c) \
+	(0xE0000 <= (c) && (c) <= 0xE0FFF)
+#define isDefaultIgnorable(c) \
+	( (0x2060 <= (c) && (c) <= 0x206F) ||	\
+	  (0xFFF0 <= (c) && (c) <= 0xFFFB) ||	\
+	  isTag(c) )
+#define isYiSyllable(c) \
+	(0xA000 <= (c) && (c) <= 0xA48C && (c) != 0xA015)
 
 /*
  * Utilities
@@ -103,41 +93,74 @@ static
 propval_t _bsearch(mapent_t* map, size_t mapsiz, unichar_t c)
 {
     mapent_t *top, *bot, *cur;
-    propval_t result;
 
     if (!map || !mapsiz)
 	return PROP_UNKNOWN;
     top = map;
     bot = map + mapsiz - 1;
-    result = PROP_UNKNOWN;
     while (top <= bot) {
 	cur = top + (bot - top) / 2;
 	if (c < cur->beg)
 	    bot = cur - 1;
 	else if (cur->end < c)
 	    top = cur + 1;
-	else {
-	    result = cur->prop;
-	    break;
-	}
+	else
+	    return cur->prop;
     }
-    return result;
+    return PROP_UNKNOWN;
+}
+
+/*
+ * _hsearch (map, hash, hashidx, hashsiz, c)
+ * Examine hash table search.
+ */
+static
+propval_t _hsearch(mapent_t *map,
+		   const unsigned short* hash, const unsigned short* hashidx,
+		   size_t hashsiz, unichar_t c)
+{
+    size_t key, idx, end;
+    mapent_t *cur;
+
+    key = c % HASH_MODULUS;
+    idx = hashidx[key];
+    if (hashsiz <= idx)
+	return PROP_UNKNOWN;
+    end = hashidx[key + 1];
+
+    for ( ; idx < end; idx++) {
+	cur = map + (size_t)(hash[idx]);
+	if (c < cur->beg)
+	    break;
+	else if (c <= cur->end)
+	    return cur->prop;
+    }
+    return PROP_UNKNOWN;
 }
 
 /*
  * Exports
  */
 
-propval_t eawidth(linebreakObj *obj, unichar_t c)
+propval_t linebreak_eawidth(linebreakObj *obj, unichar_t c)
 {
     propval_t ret;
-    assert(eamap && eamapsiz);
 
-    ret = _bsearch(obj->eamap, obj->eamapsiz, c);
-    if (ret == PROP_UNKNOWN)
-	ret = _bsearch(eamap, eamapsiz, c);
-    if (ret == PROP_UNKNOWN)
-	ret = EA_N;
+    if (isCJKIdeograph(c) || isHangulSyllable(c) || isYiSyllable(c))
+	return EA_W;
+    if (isDefaultIgnorable(c))
+	return EA_Z;
+
+    if (isPrivateUse(c))
+	ret = EA_A;
+    else {
+	assert(linebreak_eamap && linebreak_eamapsiz);
+	ret = _bsearch(obj->eamap, obj->eamapsiz, c);
+	if (ret == PROP_UNKNOWN)
+	    ret = _hsearch(linebreak_eamap, linebreak_eahash, linebreak_eahashidx, linebreak_eahashsiz, c);
+	if (ret == PROP_UNKNOWN)
+	    ret = EA_N;
+    }
     if (ret == EA_A) {
 	if (obj->options & LINEBREAK_OPTION_EASTASIAN_CONTEXT)
 	    return EA_F;
@@ -149,13 +172,28 @@ propval_t eawidth(linebreakObj *obj, unichar_t c)
 propval_t _gbclass(linebreakObj *obj, unichar_t c)
 {
     propval_t ret;
-    assert(lbmap && lbmapsiz);
 
-    ret = _bsearch(obj->lbmap, obj->lbmapsiz, c);
-    if (ret == PROP_UNKNOWN)
-	ret = _bsearch(lbmap, lbmapsiz, c);
-    if (ret == PROP_UNKNOWN)
+    if (isCJKIdeograph(c) || isYiSyllable(c))
+	return LB_ID;
+    if (isHangulSyllable(c)) {
+	if (c % 28 == 16)
+	    return LB_H2;
+	else
+	    return LB_H3;
+    }
+    if (isTag(c))
+	return LB_CM;
+
+    if (isPrivateUse(c))
 	ret = LB_XX;
+    else {
+	assert(linebreak_lbmap && linebreak_lbmapsiz);
+	ret = _bsearch(obj->lbmap, obj->lbmapsiz, c);
+	if (ret == PROP_UNKNOWN)
+	    ret = _hsearch(linebreak_lbmap, linebreak_lbhash, linebreak_lbhashidx, linebreak_lbhashsiz, c);
+	if (ret == PROP_UNKNOWN)
+	    ret = LB_XX;
+    }
     if (ret == LB_AI) {
 	if (obj->options & LINEBREAK_OPTION_EASTASIAN_CONTEXT)
 	    return LB_ID;
@@ -165,9 +203,9 @@ propval_t _gbclass(linebreakObj *obj, unichar_t c)
 	return LB_AL;
     return ret;
 }
-propval_t lbrule(linebreakObj *obj, propval_t b_idx, propval_t a_idx);
+propval_t linebreak_lbrule(linebreakObj *obj, propval_t b_idx, propval_t a_idx);
 
-void gcinfo(linebreakObj *obj, unistr_t *str, size_t pos,
+void linebreak_gcinfo(linebreakObj *obj, unistr_t *str, size_t pos,
     propval_t *gclsptr, size_t *glenptr, size_t *elenptr)
 {
     propval_t gcls = PROP_UNKNOWN;
@@ -234,7 +272,7 @@ void gcinfo(linebreakObj *obj, unistr_t *str, size_t pos,
 	    ncls = _gbclass(obj, nchr);
 	    if ((ncls == LB_H2 || ncls == LB_H3 ||
 		 ncls == LB_JL || ncls == LB_JV || ncls == LB_JT) &&
-		lbrule(obj, cls, ncls) != DIRECT) {
+		linebreak_lbrule(obj, cls, ncls) != DIRECT) {
 		pos++;
 		glen++;
 		cls = ncls;
@@ -246,7 +284,7 @@ void gcinfo(linebreakObj *obj, unistr_t *str, size_t pos,
     } else if (cls == LB_SAprepend || cls == LB_SAbase) {
 #ifdef USE_LIBTHAI
 	propval_t gscript ;
-	gscript = _bsearch(scriptmap, scriptmapsiz, chr);
+	gscript = _bsearch(linebreak_scriptmap, linebreak_scriptmapsiz, chr);
 	if (gscript == 	SCRIPT_Thai) {
 	    pos++;
 	    *gclsptr = LB_SA;
@@ -254,7 +292,7 @@ void gcinfo(linebreakObj *obj, unistr_t *str, size_t pos,
 		if (str_len <= pos)
 		    break;
 		chr = str->str[pos];
-		gscript = _bsearch(scriptmap, scriptmapsiz, chr);
+		gscript = _bsearch(linebreak_scriptmap, linebreak_scriptmapsiz, chr);
 		if (gscript != SCRIPT_Thai)
 		    break;
 		pos++;
@@ -308,13 +346,13 @@ void gcinfo(linebreakObj *obj, unistr_t *str, size_t pos,
     return;
 }
 
-propval_t lbclass(linebreakObj *obj, unichar_t c)
+propval_t linebreak_lbclass(linebreakObj *obj, unichar_t c)
 {
     propval_t ret;
     ret = _gbclass(obj, c);
 #ifdef USE_LIBTHAI
     if ((ret == LB_SAprepend || ret == LB_SAbase || ret == LB_SAextend) &&
-	_bsearch(scriptmap, scriptmapsiz, c) == SCRIPT_Thai)
+	_bsearch(linebreak_scriptmap, linebreak_scriptmapsiz, c) == SCRIPT_Thai)
 	return LB_SA;
 #endif /* USE_LIBTHAI */
     if (ret == LB_SAprepend || ret == LB_SAbase)
@@ -324,22 +362,22 @@ propval_t lbclass(linebreakObj *obj, unichar_t c)
     return ret;
 }
 
-propval_t lbrule(linebreakObj *obj, propval_t b_idx, propval_t a_idx)
+propval_t linebreak_lbrule(linebreakObj *obj, propval_t b_idx, propval_t a_idx)
 {
     propval_t result = PROP_UNKNOWN;
 
-    assert(rulemap && rulemapsiz);
-    if (b_idx < 0 || rulemapsiz <= b_idx ||
-	a_idx < 0 || rulemapsiz <= a_idx)
+    assert(linebreak_rulemap && linebreak_rulemapsiz);
+    if (b_idx < 0 || linebreak_rulemapsiz <= b_idx ||
+	a_idx < 0 || linebreak_rulemapsiz <= a_idx)
 	;
     else
-	result = rulemap[b_idx][a_idx];
+	result = linebreak_rulemap[b_idx][a_idx];
     if (result == PROP_UNKNOWN)
 	return DIRECT;
     return result;
 }
 
-size_t strsize(linebreakObj *obj,
+size_t linebreak_strsize(linebreakObj *obj,
     size_t len, unistr_t *pre, unistr_t *spc, unistr_t *str, size_t max)
 {
     unistr_t spcstr = { 0, 0 };
@@ -362,7 +400,7 @@ size_t strsize(linebreakObj *obj,
 
 	if (length <= pos)
 	    break;
-	gcinfo(obj, &spcstr, pos, &gcls, &glen, &elen);
+	linebreak_gcinfo(obj, &spcstr, pos, &gcls, &glen, &elen);
 	npos = pos + glen + elen;
 	w = 0;
 
@@ -374,7 +412,7 @@ size_t strsize(linebreakObj *obj,
 	}
 	while (pos < npos) {
 	    c = spcstr.str[pos];
-	    width = eawidth(obj, c);
+	    width = linebreak_eawidth(obj, c);
 	    if (width == EA_F || width == EA_W)
 		w += 2;
 	    else if (width != EA_Z)
@@ -400,46 +438,6 @@ size_t strsize(linebreakObj *obj,
 /*
  * Codes below belong to Perl layer...
  */
-
-typedef struct {
-    char *name;
-    propval_t *ptr;
-} constent_t;
-static
-constent_t _constent[] = {
-    { "EA_Z", &EA_Z }, 
-    { "EA_N", &EA_N }, 
-    { "EA_A", &EA_A }, 
-    { "EA_W", &EA_W }, 
-    { "EA_F", &EA_F }, 
-    { "LB_BK", &LB_BK },
-    { "LB_CR", &LB_CR },
-    { "LB_LF", &LB_LF },
-    { "LB_NL", &LB_NL },
-    { "LB_SP", &LB_SP },
-    { "LB_ZW", &LB_ZW },
-    { "LB_WJ", &LB_WJ },
-    { "LB_AL", &LB_AL },
-    { "LB_CM", &LB_CM },
-    { "LB_ID", &LB_ID },
-    { "LB_H2", &LB_H2 },
-    { "LB_H3", &LB_H3 },
-    { "LB_JL", &LB_JL },
-    { "LB_JV", &LB_JV },
-    { "LB_JT", &LB_JT },
-    { "LB_AI", &LB_AI },
-    { "LB_SA", &LB_SA },
-    { "LB_SG", &LB_SG },
-    { "LB_XX", &LB_XX },
-    { "LB_SAprepend", &LB_SAprepend },
-    { "LB_SAbase", &LB_SAbase },
-    { "LB_SAextend", &LB_SAextend },
-#ifdef USE_LIBTHAI
-    { "SCRIPT_Thai", &SCRIPT_Thai },
-#endif /* USE_LIBTHAI */
-    { "DIRECT", &DIRECT },
-    { NULL, NULL },
-};
 
 static
 mapent_t *_loadmap(mapent_t *propmap, SV *mapref, size_t *mapsiz)
@@ -568,97 +566,6 @@ linebreakObj *_selftoobj(SV *self)
 MODULE = Unicode::LineBreak	PACKAGE = Unicode::LineBreak	
 
 void
-_loadconst(...)
-    PROTOTYPE: @
-    PREINIT:
-	size_t i;
-	constent_t *p;
-	char *name;
-	int r;
-    CODE:
-	p = _constent;
-	while (p->name) {
-	    *(p->ptr) = PROP_UNKNOWN;
-	    for (i = 0; i < items; i++) {
-		name = (char *)SvPV_nolen(ST(i));
-		if (strcmp(name, p->name) == 0) {
-		    dSP;
-		    ENTER; SAVETMPS; PUSHMARK(SP);
-		    XPUSHs(sv_2mortal(newSViv(0)));
-		    PUTBACK;
-		    r = call_pv(name, G_SCALAR | G_NOARGS);
-		    SPAGAIN;
-		    if (r != 1)
-			croak("_loadconst: Internal error");
-		    *(p->ptr) = POPi;
-		    PUTBACK; FREETMPS; LEAVE;
-		    break;
-		}
-	    }
-	    p++;		
-	}
-
-void
-_loadlb(mapref)
-	SV *mapref;
-    CODE:
-	lbmap = _loadmap(lbmap, mapref, &lbmapsiz);
-
-void
-_loadea(mapref)
-	SV *mapref;
-    CODE:
-	eamap = _loadmap(eamap, mapref, &eamapsiz);
-
-void
-_loadscript(mapref)
-	SV *mapref;
-    CODE:
-	scriptmap = _loadmap(scriptmap, mapref, &scriptmapsiz);
-
-void
-_loadrule(mapref)
-	SV *	mapref;
-    PROTOTYPE: $
-    INIT:
-	size_t n, m;
-	AV * rule;
-	AV * ent;
-	propval_t prop;
-    CODE:
-	if (rulemap && rulemapsiz) {
-	    for (n = 0; n < rulemapsiz; n++)
-		free(rulemap[n]);
-	    free(rulemap);
-	}
-	rule = (AV *)SvRV(mapref);
-	rulemapsiz = av_len(rule) + 1;
-	if (rulemapsiz <= 0) {
-	    rulemapsiz = 0;
-	    rulemap = NULL;
-	} else if ((rulemap = malloc(sizeof(propval_t **) * rulemapsiz))
-		   == NULL) {
-	    rulemapsiz = 0;
-	    rulemap = NULL;
-	    croak("_loadrule: Can't allocate memory");
-	} else {
-	    for (n = 0; n < rulemapsiz; n++) {
-		if ((rulemap[n] = malloc(sizeof(propval_t) * rulemapsiz))
-		    == NULL) {
-		    rulemapsiz = 0;
-		    rulemap = NULL;
-		    croak("_loadrule: Can't allocate memory");
-		} else {
-		    ent = (AV *)SvRV(*av_fetch(rule, n, 0));
-		    for (m = 0; m < rulemapsiz; m++) {
-			prop = SvIV(*av_fetch(ent, m, 1));
-			rulemap[n][m] = prop;
-		    }
-		}		    
-	    }
-	}
-
-void
 _config(self)
 	SV *self;
     PROTOTYPE: $
@@ -737,7 +644,7 @@ eawidth(self, str)
 	    XSRETURN_UNDEF;
 	obj = _selftoobj(self);
 	c = utf8_to_uvuni((U8 *)SvPV_nolen(str), NULL);
-	prop = eawidth(obj, c);
+	prop = linebreak_eawidth(obj, c);
 
 	if (prop == PROP_UNKNOWN)
 	    XSRETURN_UNDEF;
@@ -760,7 +667,7 @@ lbclass(self, str)
 	    XSRETURN_UNDEF;
 	obj = _selftoobj(self);
 	c = utf8_to_uvuni((U8 *)SvPV_nolen(str), NULL);
-	prop = lbclass(obj, c);
+	prop = linebreak_lbclass(obj, c);
 
 	if (prop == PROP_UNKNOWN)
 	    XSRETURN_UNDEF;
@@ -781,7 +688,7 @@ lbrule(self, b_idx, a_idx)
 	if (!SvOK(ST(1)) || !SvOK(ST(2)))
 	    XSRETURN_UNDEF;
 	obj = _selftoobj(self);
-	prop = lbrule(obj, b_idx, a_idx);
+	prop = linebreak_lbrule(obj, b_idx, a_idx);
 
 	if (prop == PROP_UNKNOWN)
 	    XSRETURN_UNDEF;
@@ -811,7 +718,7 @@ strsize(self, len, pre, spc, str, ...)
 	else
 	    max = 0;
 
-	RETVAL = strsize(obj, len, &unipre, &unispc, &unistr, max);
+	RETVAL = linebreak_strsize(obj, len, &unipre, &unispc, &unistr, max);
 
 	if (unipre.str) free(unipre.str);
 	if (unispc.str) free(unispc.str);
@@ -836,13 +743,20 @@ gcinfo(self, str, pos)
 	    XSRETURN_UNDEF;
 	obj = _selftoobj(self);
 	_utf8touni(&unistr, str);
-	gcinfo(obj, &unistr, pos, &gcls, &glen, &elen);
+	linebreak_gcinfo(obj, &unistr, pos, &gcls, &glen, &elen);
 	XPUSHs(sv_2mortal(newSViv(gcls)));
 	XPUSHs(sv_2mortal(newSViv(glen)));
 	XPUSHs(sv_2mortal(newSViv(elen)));
 
 	if (unistr.str) free(unistr.str);
 	return;
+
+char *
+UNICODE_VERSION()
+    CODE:
+	RETVAL = linebreak_unicode_version;
+    OUTPUT:
+	RETVAL
 
 MODULE = Unicode::LineBreak	PACKAGE = Unicode::LineBreak::SouthEastAsian
 

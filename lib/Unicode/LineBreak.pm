@@ -6,11 +6,11 @@ require 5.008;
 ### Pragmas:
 use strict;
 use warnings;
-use vars qw($VERSION @EXPORT_OK @ISA $UNICODE_VERSION @LB_CLASSES $Config);
+use vars qw($VERSION @EXPORT_OK @ISA @LB_CLASSES $Config);
 
 ### Exporting:
 use Exporter;
-our @EXPORT_OK = qw(context MANDATORY DIRECT INDIRECT PROHIBITED);
+our @EXPORT_OK = qw(UNICODE_VERSION context);
 our %EXPORT_TAGS = ('all' => [@EXPORT_OK]);
 
 ### Inheritance:
@@ -20,20 +20,12 @@ our @ISA = qw(Exporter);
 use Carp qw(croak carp);
 use Encode qw(is_utf8);
 use MIME::Charset;
+use File::Spec;
 
 ### Globals
 
 ### The package version
 require Unicode::LineBreak::Version;
-
-### Load XS or Non-XS module
-eval {
-    require XSLoader;
-    XSLoader::load('Unicode::LineBreak', $VERSION);
-};
-if ($@) {
-    require Unicode::LineBreak::NoXS;
-}
 
 ### Public Configuration Attributes
 our $Config = {
@@ -55,29 +47,29 @@ eval { require Unicode::LineBreak::Defaults; };
 
 ### Exportable constants
 use Unicode::LineBreak::Constants;
-
-use constant {
-    MANDATORY => M,
-    DIRECT => D,
-    INDIRECT => I,
-    PROHIBITED => P,
-    URGENT => 200,
-};
-
 use constant 1.01;
 my $package = __PACKAGE__;
 my @consts = grep { s/^${package}::(\w\w+)$/$1/ } keys %constant::declared;
-_loadconst(@consts);
 push @EXPORT_OK, @consts;
 push @{$EXPORT_TAGS{'all'}}, @consts;
 
-require Unicode::LineBreak::Rules;
-_loadrule($Unicode::LineBreak::RULES_MAP);
-
-require Unicode::LineBreak::Data;
-_loadlb($Unicode::LineBreak::lb_MAP);
-_loadea($Unicode::LineBreak::ea_MAP);
-_loadscript($Unicode::LineBreak::script_MAP);
+### Load XS or Non-XS module
+eval {
+    require XSLoader;
+    XSLoader::load('Unicode::LineBreak', $VERSION);
+};
+if ($@) {
+    require Unicode::LineBreak::NoXS;
+    my $version = Unicode::LineBreak::DEFAULT_UNICODE_VERSION();
+    foreach my $dir (@INC) {
+	eval {
+	    require File::Spec->catfile($dir, 'Unicode', 'LineBreak',
+					$version.'.pm');
+	};
+	last unless $@;
+    }
+    croak "Unknown Unicode version $version" if $@;
+}
 
 ### Privates
 my $EASTASIAN_CHARSETS = qr{
@@ -384,7 +376,7 @@ sub break_partial ($$) {
 		%after = ('frg' => substr($str, $pos, $glen + $elen),
 			  'spc' => '');
 		$pos += $glen + $elen;
-		# LB27: Treate hangul syllable as if it were ID (or AL).
+		# LB27: Treat hangul syllable as if it were ID (or AL).
 		if ($gcls == LB_H2 or $gcls == LB_H3 or
 		    $gcls == LB_JL or $gcls == LB_JV or $gcls == LB_JT) {
 		    $after{cls} = ($s->{HangulAsAL} eq 'YES')? LB_AL: LB_ID;

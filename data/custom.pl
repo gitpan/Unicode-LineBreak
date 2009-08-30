@@ -9,7 +9,7 @@ if ($ARGV[0] eq 'lb') {
 LB_CUSTOM:
 
 print <<'EOF';
-## SA characters may be categorized by their Grapheme_Break properties.
+## SA characters may be categorized by their Grapheme_Cluster_Break properties.
 ## See [UAX #29].
 EOF
 
@@ -67,7 +67,7 @@ while (<SCR>) {
 }
 
 open UD, '<', "UnicodeData-$ARGV[1].txt";
-open SASCR, '>', 'SAScripts.txt';
+open SASCR, '>', "SAScripts-$ARGV[1].txt";
 while (<UD>) {
     ($code, $name, $cat) = split /;/;
     if ($SA{$code}) {
