@@ -20,7 +20,7 @@ our @ISA = qw(Exporter);
 use Carp qw(croak carp);
 use Encode qw(is_utf8);
 use MIME::Charset;
-use File::Spec;
+use Unicode::GCString;
 
 ### Globals
 
@@ -53,23 +53,9 @@ my @consts = grep { s/^${package}::(\w\w+)$/$1/ } keys %constant::declared;
 push @EXPORT_OK, @consts;
 push @{$EXPORT_TAGS{'all'}}, @consts;
 
-### Load XS or Non-XS module
-eval {
-    require XSLoader;
-    XSLoader::load('Unicode::LineBreak', $VERSION);
-};
-if ($@) {
-    require Unicode::LineBreak::NoXS;
-    my $version = Unicode::LineBreak::DEFAULT_UNICODE_VERSION();
-    foreach my $dir (@INC) {
-	eval {
-	    require File::Spec->catfile($dir, 'Unicode', 'LineBreak',
-					$version.'.pm');
-	};
-	last unless $@;
-    }
-    croak "Unknown Unicode version $version" if $@;
-}
+### Load XS module
+require XSLoader;
+XSLoader::load('Unicode::LineBreak', $VERSION);
 
 ### Privates
 my $EASTASIAN_CHARSETS = qr{
@@ -162,7 +148,12 @@ my %URGENT_BREAKING_FUNCS = (
 );
 
 # Built-in custom breaking behaviors specified by C<UserBreaking>.
-my $URIre = qr{(?:https?|s?ftps?)://[\x21-\x7E]+}io;
+my $URIre = qr{
+	       \b
+	       (?:url:)?
+	       (?:[a-z][-0-9a-z+.]+://|news:|mailto:)
+	       [\x21-\x7E]+
+}iox;
 my %USER_BREAKING_FUNCS = (
     'NONBREAKURI' => [ $URIre, sub { ($_[1]) } ],
     # Breaking URIs according to CMOS:
@@ -176,10 +167,11 @@ my %USER_BREAKING_FUNCS = (
     'BREAKURI' => [ $URIre,
 		    sub {
 			my @c = split m{
+			    (?<=^url:) |
 			    (?<=[/]) (?=[^/]) |
 			    (?<=[^-.]) (?=[-~.,_?\#%=&]) |
 			    (?<=[=&]) (?=.)
-			}ox, $_[1];
+			}iox, $_[1];
 			# Won't break punctuations at end of matches.
 			while (2 <= scalar @c and $c[$#c] =~ /^[.:;,>]+$/) {
 			    my $c = pop @c;
@@ -237,10 +229,13 @@ sub break_partial ($$) {
     # spc: Trailing spaces.
     # urg: This buffer had been broken by urgent/custom/complex breaking.
     # eop: There is a mandatory breaking point at end of this buffer.
+    # bb:  Allows break before.
+    # pb:  Prevents break before.
     my %before = ('frg' => '', 'spc' => '');
     my %after = ('frg' => '', 'spc' => '');
     ## Unread input.
-    $str = $s->{_unread}.$str;
+    $str = Unicode::GCString->new($s->{_unread}.$str, $s);
+    my @str = @{$str->{str}};
     ## Start of text/paragraph status.
     # 0: Start of text not done.
     # 1: Start of text done while start of paragraph not done.
@@ -251,19 +246,19 @@ sub break_partial ($$) {
     my $result = '';
     ## Queue of buffers broken by urgent/custom/complex breaking.
     my @custom = ();
-    ## Current position and length of STR.
-    my $pos = 0;
-    my $str_len = length $str;
+    #XXX## Current position and length of STR.
+    #XXXmy $pos = 0;
+    #XXXmy $str_len = length $str;
 
     while (1) {
 	### Chop off a pair of unbreakable character clusters from text.
 
       CHARACTER_PAIR:
 	while (1) {
-	    my ($gcls, $glen, $elen);
+	    my ($gcol, $gcls, $bb, $pb);
 
 	    # End of input.
-	    last CHARACTER_PAIR if !scalar(@custom) and $str_len <= $pos;
+	    last CHARACTER_PAIR if !scalar(@custom) and !scalar @str;
 	    # Mandatory break
 	    last CHARACTER_PAIR if defined $before{cls} and $before{eop};
 
@@ -271,25 +266,23 @@ sub break_partial ($$) {
 	    if (!scalar(@custom)) {
 		## Then, go ahead reading input.
 
+		($gcls, $bb, $pb) = @{$str[0]}[2,3,4];
+
 		#
 		# Append SP/ZW/eop to ``before'' buffer.
 		#
-
 		while (1) {
-		    ($gcls, $glen, $elen) = $s->gcinfo($str, $pos);
-
 		    # - Explicit breaks and non-breaks
 
 		    # LB7(1): × SP+
 		    if ($gcls == LB_SP) {
-			$before{spc} .= substr($str, $pos, $glen);
-			$pos += $glen;
+			$before{spc} .= (shift @str)->[0];
 			# Treat (sot | eop) SP+  as if it were WJ.
 			$before{cls} = LB_WJ unless defined $before{cls};
 
 			# End of input.
-			last CHARACTER_PAIR if $str_len <= $pos;
-			($gcls, $glen, $elen) = $s->gcinfo($str, $pos);
+			last CHARACTER_PAIR if !scalar @str;
+			($gcls, $bb, $pb) = @{$str[0]}[2,3,4];
 		    }
 
 		    # - Mandatory breaks
@@ -297,12 +290,11 @@ sub break_partial ($$) {
 		    # LB4 - LB7: × SP* (BK | CR LF | CR | LF | NL) !
 		    if ($gcls == LB_BK or $gcls == LB_CR or $gcls == LB_LF or
 			$gcls == LB_NL) {
-			$before{spc} .= substr($str, $pos, $glen);
-			$pos += $glen;
+			$before{spc} .= (shift @str)->[0];
 			$before{cls} = $gcls;
 			$before{eop} = 1
 			    unless !$eot and $gcls == LB_CR and
-			    $glen == 1 and $str_len <= $pos;
+			    !scalar @str;
 			last CHARACTER_PAIR;
 		    }
 
@@ -310,54 +302,36 @@ sub break_partial ($$) {
 
 		    # LB7(2): × (SP* ZW+)+
 		    if ($gcls == LB_ZW) {
-			$before{frg} .= $before{spc}.substr($str, $pos, $glen);
-			$pos += $glen;
+			$before{frg} .= $before{spc}.((shift @str)->[0]);
 			$before{spc} = '';
-			$before{cls} = LB_ZW;
+			$before{cls} = $gcls;
 
 			# End of input
-			last CHARACTER_PAIR if $str_len <= $pos;
-			($gcls, $glen, $elen) = $s->gcinfo($str, $pos);
+			last CHARACTER_PAIR if !scalar @str;
+			($gcls, $bb, $pb) = @{$str[0]}[2,3,4];
 			next;
 		    }
 		    last;
 		} # while (1)
 
-		#
-		# Fill custom buffer and retry
-		#
-		my @c;
-		# Try custom breaking.
-		my $len;
-		if (scalar(@c = $s->_test_custom($str, $pos, \$len))) {
-		    # End of input - might be partial match.
-		    if (!$eot and $str_len <= $pos + $len) {
-			$s->{_line} = \%line;
-			$s->{_unread} =
-			    $before{frg}.$before{spc}.substr($str, $pos);
-			$s->{_sox} = $sox;
-			return $result;
-		    }
-		    $pos += $len;
-		    push @custom, @c;
-		    next;
-		}
-
 		# Try complex breaking - Break SA sequence.
 		if ($gcls == LB_SA) {
 		    my $frg = '';
-		    $frg .= substr($str, $pos, $glen + $elen);
-		    $pos += $glen + $elen;
+		    while (1) {
+			$frg .= (shift @str)->[0];
 
-		    # End of input - might be partial sequence.
-		    if (!$eot and $str_len <= $pos) {
-			$s->{_line} = \%line;
-			$s->{_unread} = $before{frg}.$before{spc}.$frg;
-			$s->{_sox} = $sox;
-			return $result;
+			# End of input - might be partial sequence.
+			if (!scalar @str && !$eot) {
+			    $s->{_line} = \%line;
+			    $s->{_unread} = $before{frg}.$before{spc}.$frg;
+			    $s->{_sox} = $sox;
+			    return $result;
+			}
+			($gcls, $bb, $pb) = @{$str[0]}[2,3,4];
+			last unless $gcls and $gcls == LB_SA;
 		    }
-		    @c = map { {'cls' => LB_AL, 'frg' => $_, 'spc' => '',
-				'urg' => 1}; }
+		    my @c = map { {'cls' => LB_AL, 'frg' => $_, 'spc' => '',
+				   'urg' => 1}; }
 			     Unicode::LineBreak::SouthEastAsian::break($frg);
 		    if (scalar @c) {
 			$c[$#c]->{urg} = 0;
@@ -373,9 +347,8 @@ sub break_partial ($$) {
 		# - Rules for other line breaking classes
 
 		# LB1: Assign a line breaking class to each characters.
-		%after = ('frg' => substr($str, $pos, $glen + $elen),
-			  'spc' => '');
-		$pos += $glen + $elen;
+		%after = ('frg' => (shift @str)->[0], 'spc' => '',
+			  'bb' => $bb, 'pb' => $pb);
 		# LB27: Treat hangul syllable as if it were ID (or AL).
 		if ($gcls == LB_H2 or $gcls == LB_H3 or
 		    $gcls == LB_JL or $gcls == LB_JV or $gcls == LB_JT) {
@@ -427,7 +400,13 @@ sub break_partial ($$) {
 	    $action = URGENT;
 	# LB11 - LB29 and LB31: Tailorable rules (except LB11, LB12).
 	} elsif (defined $after{cls}) {
-	    $action = $s->lbrule($before{cls}, $after{cls});
+	    if ($after{bb}) {
+		$action = DIRECT;
+	    } elsif ($after{pb}) {
+		$action = PROHIBITED;
+	    } else {
+		$action = $s->lbrule($before{cls}, $after{cls});
+	    }
 
 	    # Check prohibited break.
 	    if ($action == PROHIBITED or
@@ -501,8 +480,8 @@ sub break_partial ($$) {
 	} # if ($before{eop})
 
         # Check end of input.
-        if (!$eot and !defined $after{cls} and
-	    !scalar @custom and $str_len <= $pos) {
+        if (!$eot and !defined $after{cls} and !scalar @custom and
+	    !scalar @str) {
 	    # Save status then output partial result.
 	    $s->{_line} = \%line;
 	    $s->{_unread} = $before{frg}.$before{spc};
@@ -544,6 +523,7 @@ sub break_partial ($$) {
 					   $before{spc});
 		}
 		if (scalar @c) {
+		    $c[$#c]->{eop} = $before{eop};
 		    push @c, {%after} if defined $after{cls};
 		    unshift @custom, @c;
 		    %before = ('frg' => '', 'spc' => '');
@@ -570,8 +550,8 @@ sub break_partial ($$) {
 	} # if ($s->{ColumnsMax} and ...)
 
 	# Mandatory break or end-of-text.
-	if ($eot and !defined $after{cls} and
-	    !scalar @custom and $str_len <= $pos) {
+	if ($eot and !defined $after{cls} and !scalar @custom and
+	    !scalar @str) {
 	    last;
 	}
 	if ($action == MANDATORY) {
@@ -662,9 +642,9 @@ sub config ($@) {
 	    next unless defined $ub;
 	}
 	my ($re, $func) = @{$ub};
-	push @cf, [qr{\G($re)}o, $func];
+	push @cf, [qr{$re}o, $func];
     }
-    $self->{_custom_funcs} = \@cf;
+    $self->{_user_breaking_funcs} = \@cf;
 
     # Context. Either East Asian or Non-East Asian.
     my $context = uc($self->{Context} || $Config->{Context});
@@ -691,48 +671,55 @@ sub config ($@) {
     }
 
     ## Classes
+    my %map = ();
     foreach $o (qw{TailorLB TailorEA}) {
 	$self->{$o} = [@{$Config->{$o}}]
 	    unless defined $self->{$o} and ref $self->{$o};
 	my @v = @{$self->{$o}};
-	my %map = ();
 	while (scalar @v) {
 	    my $k = shift @v;
 	    my $v = shift @v;
 	    next unless defined $k and defined $v;
 	    if (ref $k) {
 		foreach my $c (@{$k}) {
-		    $map{$c} = $v;
+		    $map{$c} ||= [-1, -1];
+		    if ($o eq 'TailorLB') {
+			$map{$c}->[0] = $v;
+		    } else {
+			$map{$c}->[1] = $v;
+		    }
 		}
 	    } else {
-		$map{$k} = $v;
-	    }
-	}
-	my @map = ();
-	my ($beg, $end) = (undef, undef);
-	my $p;
-	foreach my $c (sort {$a <=> $b} keys %map) {
-	    unless ($map{$c}) {
-		next;
-	    } elsif (defined $end and $end + 1 == $c and $p eq $map{$c}) {
-		$end = $c;
-	    } else {
-		if (defined $beg and defined $end) {
-		    push @map, [$beg, $end, $p];
+		$map{$k} ||= [-1, -1];
+		if ($o eq 'TailorLB') {
+		    $map{$k}->[0] = $v;
+		} else {
+		    $map{$k}->[1] = $v;
 		}
-		$beg = $end = $c;
-		$p = $map{$c};
 	    }
-	}
-	if (defined $beg and defined $end) {
-	    push @map, [$beg, $end, $p];
-	}
-	if ($o eq 'TailorLB') {
-	    $self->{_lbmap} = \@map;
-	} elsif ($o eq 'TailorEA') {
-	    $self->{_eamap} = \@map;
 	}
     }
+    my @map = ();
+    my ($beg, $end) = (undef, undef);
+    my $p;
+    foreach my $c (sort {$a <=> $b} keys %map) {
+	unless ($map{$c}) {
+	    next;
+	} elsif (defined $end and $end + 1 == $c and
+		 $p->[0] == $map{$c}->[0] and $p->[1] == $map{$c}->[1]) {
+	    $end = $c;
+	} else {
+	    if (defined $beg and defined $end) {
+		push @map, [$beg, $end, @{$p}];
+	    }
+	    $beg = $end = $c;
+	    $p = $map{$c};
+	}
+    }
+    if (defined $beg and defined $end) {
+	push @map, [$beg, $end, @{$p}];
+    }
+    $self->{_map} = \@map;
 
     # Other options
     foreach $o (qw{CharactersMax ColumnsMin ColumnsMax Newline}) {
@@ -808,42 +795,6 @@ sub _urgent_break ($$$$$$$) {
 	return @broken;
     }
     return ({'cls' => $cls, 'frg' => $frg, 'spc' => $spc, 'urg' => 1});
-}
-
-sub _test_custom ($$$) {
-    my $self = shift;
-    my $str = shift;
-    my $pos = shift;
-    my $lenref = shift;
-    my @custom = ();
-
-    pos($str) = $pos;
-    foreach my $c (@{$self->{_custom_funcs}}) {
-	my ($re, $func) = @{$c};
-	if ($str =~ /$re/cg) {
-	    my $frg = $1;
-	    foreach my $b (&{$func}($self, $frg)) {
-		my $s = '';
-		while (length $b and
-		       $self->lbclass(substr($b, -1)) == LB_SP) {
-		    $s = substr($b, -1).$s;
-		    $b = substr($b, 0, length($b) - 1);
-		}
-		if (length $b) {
-		    push @custom, {'cls' => LB_XX, 'frg' => $b, 'spc' => $s,
-				   'urg' => 1};
-		} elsif (scalar @custom) {
-		    $custom[$#custom]->{spc} .= $s;
-		} elsif (length $s) {
-		    push @custom, {'cls' => LB_XX, 'frg' => $b, 'spc' => $s,
-				   'urg' => 1};
-		}
-	    }
-	    last;
-	}
-    }
-    $$lenref = pos($str) - $pos;
-    return @custom;
 }
 
 sub _sizing ($$$$$;$) {
