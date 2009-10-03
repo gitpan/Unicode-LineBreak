@@ -1,3 +1,12 @@
+1.003_07  Sat Oct 03 2009
+
+	* Transitional release - NOTE that this release is VERY slow.
+	* Imp/Chg: Custom functions (for sizing, user breaking, urgent breaking
+	  and format) accepts grapheme cluster string.
+	* Cleanup: separate C codes.
+	* Doc: Added examples and link to CPAN RT page.
+	* Doc: Added items to BUGS section.
+
 1.003_06	Sat Sep 12 2009
 
 	* Fix: Get back LB9: Some CM characters may be single grapheme cluster

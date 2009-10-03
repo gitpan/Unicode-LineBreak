@@ -27,95 +27,16 @@ use Unicode::LineBreak;
 ### Globals
 
 # The package version
-our $VERSION = '0.003_01';
+our $VERSION = '0.004_01';
 
 use overload 
     '@{}' => \&as_arrayref,
     '""' => \&as_string,
     '.' => \&concat,
-    '.=' => \&concat,
-    #XXX'<>' => \&next,
+    #XXX'.=' => \&concat, #FIXME:segfault
+    'cmp' => \&cmp,
+    '<>' => \&next,
     ;
-
-# ->new (STRING, [LINEBREAK])
-sub new {
-    my $class = shift;
-    my $str = shift;
-    my $lbobj = shift || Unicode::LineBreak->new();
-
-    if (ref $str) {
-	$str = $str->as_string;
-    }
-    unless (defined $str and CORE::length $str) {
-	$str = '';
-    } elsif ($str =~ /[^\x00-\x7F]/s and !Encode::is_utf8($str)) {
-        croak "Unicode string must be given.";
-    }
-
-    my $ret = __PACKAGE__->_new('');
-    while (CORE::length $str) {
-	my $func;
-	my ($s, $match, $post) = ($str, '', '');
-	foreach my $ub (@{$lbobj->{_user_breaking_funcs}}) {
-	    my ($re, $fn) = @{$ub};
-	    if ($str =~ /$re/) {
-		if (CORE::length $& and CORE::length $` < CORE::length $s) { #`
-		    ($s, $match, $post) = ($`, $&, $'); #'`
-		    $func = $fn;
-		}
-	    }
-	}
-	if (CORE::length $match) {
-	    $str = $post;
-	} else {
-	    $s = $str;
-	    $str = '';
-	}
-
-	# Break unmatched fragment.
-	my %sa_break;
-	if (CORE::length $s) {
-	    %sa_break = map { ($_ => 1); }
-	    Unicode::LineBreak::SouthEastAsian::break_indexes($s);
-	    $s = __PACKAGE__->_new($s, $lbobj);
-	    my $pos = 0;
-	    my $length = $s->length;
-	    my @s = @{$s};
-	    for (my $i = 0; $i < $length; $i++) {
-		my $item = $s[$i];
-		if ($item->[2] == Unicode::LineBreak::LB_SA()) {
-		    $s->flag($i,
-			     $sa_break{$pos}?
-			     Unicode::LineBreak::BREAK_BEFORE():
-			     Unicode::LineBreak::PROHIBIT_BEFORE());
-		}
-		$pos += CORE::length $item->[0];
-	    }
-	    $ret .= $s;
-	}
-
-	# Break matched fragment.
-	if (CORE::length $match) {
-	    my $first = 1;
-	    foreach my $s (&{$func}($lbobj, $match)) {
-		$s = __PACKAGE__->_new($s, $lbobj);
-		my $length = $s->length;
-		if ($length) {
-		    if (!$first) {
-			$s->flag(0, Unicode::LineBreak::BREAK_BEFORE());
-		    }
-		    for (my $i = 1; $i < $length; $i++) {
-			$s->flag($i, Unicode::LineBreak::PROHIBIT_BEFORE());
-		    }
-		    $ret .= $s;
-		}
-		$first = 0;
-	    }
-	}
-    }
-
-    $ret;
-}
 
 sub as_arrayref {
     my @a = shift->as_array;
@@ -163,6 +84,31 @@ Optional L<Unicode::LineBreak> object LINEBREAK controls breaking features.
 
 I<Copy constructor>.
 Create a copy of grapheme cluster string.
+Next position of new string is set at beginning.
+
+=back
+
+=head3 Sizes
+
+=over 4
+
+=item chars
+
+I<Instance method>.
+Returns number of Unicode characters grapheme cluster string includes,
+i.e. length as Unicode string.
+
+=item columns
+
+I<Instance method>.
+Returns total number of columns of grapheme clusters
+defined by built-in character database.
+For more details see L<Unicode::LineBreak/DESCRIPTION>.
+
+=item length
+
+I<Instance method>.
+Returns number of grapheme clusters contained in grapheme cluster string.
 
 =back
 
@@ -177,32 +123,31 @@ Create a copy of grapheme cluster string.
 I<Instance method>.
 Convert grapheme cluster string to Unicode string.
 
-=item columns
+=item cmp (STRING)
+
+=item STRING C<cmp> STRING
 
 I<Instance method>.
-Returns total number of columns of grapheme clusters string
-defined by built-in character database.
-For more details see L<Unicode::LineBreak/DESCRIPTION>.
+Compare strings.  There are no oddities.
+One of each STRING may be Unicode string.
 
 =item concat (STRING)
 
 =item STRING C<.> STRING
 
-=item STRING C<.=> STRING
-
 I<Instance method>.
 Concatenate STRINGs.  One of each STRING may be Unicode string.
+Note that number of columns (see columns()) or grapheme clusters
+(see length()) of resulting string is not always equal to sum of both
+strings.
+Next position of new string is that set on left value.
 
-=item length
+=item substr (OFFSET, [LENGTH, [REPLACEMENT]])
 
 I<Instance method>.
-Returns number of grapheme clusters contained in grapheme cluster string.
-
-=item substr (INDEX, [LEN])
-
-I<Instance method>.
-B<Not yet implemented>.
 Returns substring of grapheme cluster string.
+OFFSET and LENGTH are based on grapheme clusters.
+If REPLACEMENT is specified, substring is replaced by it.
 
 =back
 
@@ -217,59 +162,47 @@ Returns substring of grapheme cluster string.
 =item as_arrayref
 
 I<Instance method>.
-Convert grapheme cluster string to an array of informations of grapheme
-clusters.
-
-=begin comment
+Convert grapheme cluster string to an array of grapheme clusters.
 
 =item eot
 
 I<Instance method>.
-B<Not implemented yet>.
 Test if current position is at end of grapheme cluster string.
-
-=end comment
 
 =begin comment
 
-=item flag (INDEX, [VALUE])
+=item flag ([OFFSET, [VALUE]])
 
 I<Undocumented>.
 
 =end comment
 
-=item item (INDEX)
+=item item ([OFFSET])
 
 I<Instance method>.
-Returns information of INDEX-th grapheme cluster as array reference.
+Returns OFFSET-th grapheme cluster.
+If OFFSET was not specified, returns next grapheme cluster.
 
 =begin comment
 
-=item next
+=item lbclass ([OFFSET])
 
-I<Instance method>, iterative.
-B<Not implemented yet>.
-Returns information of next grapheme cluster
-as array reference.
-
-=item prev
-
-B<Not implemented yet>.
-Decrement position of grapheme cluster string.
-
-=item reset
-
-I<Instance method>.
-B<Not implemented yet>.
-Reset next position of grapheme cluster string.
-
-=item rest
-
-I<Instance method>.
-B<Not implemented yet>.
-Returns rest of grapheme cluster string.
+I<Undocumented>.
 
 =end comment
+
+=item next
+
+=item C<E<lt>>OBJECTC<E<gt>>
+
+I<Instance method>, iterative.
+Returns next grapheme cluster and increment next position.
+
+=item pos ([OFFSET])
+
+I<Instance method>.
+If optional OFFSET is specified, set next position by it.
+Returns next position of grapheme cluster string.
 
 =back
 
