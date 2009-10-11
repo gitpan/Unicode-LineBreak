@@ -7,24 +7,30 @@ use vars qw(@ISA);
 @ISA = qw(ExtUtils::MakeMaker);
 require 'lib/Unicode/LineBreak/Version.pm';
 
-my $unicode_version = Unicode::LineBreak::DEFAULT_UNICODE_VERSION();
 my $enable_libthai;
 my $csubdir = 'linebreak';
 my $pkg_config = $ENV{'PKG_CONFIG'} || 'pkg-config';
 
+sub clean_subdirs {
+    return <<EOF;
+clean_subdirs:
+\tif \$(TEST_F) $csubdir/Makefile; then cd $csubdir; \$(MAKE) distclean; fi
+EOF
+}
+
 sub postamble {
     return <<EOF;
 \$(MYEXTLIB): $csubdir/Makefile
-	cd $csubdir && \$(MAKE)
+\tcd $csubdir && \$(MAKE)
 $csubdir/Makefile: $csubdir/configure
-	cd $csubdir && \\
-	\$(PERL) -i -pe '/\\bVERSION\\b/ and \$\$_="/* \$\$_ */" unless m(/\\*)' config.h.in && \\
-	./configure --disable-shared --enable-static \\
-	--with-unicode-version=$unicode_version \\
-	--enable-libthai=$enable_libthai \\
-        CFLAGS='\$(CCFLAGS) \$(OPTIMIZE) \$(CCCDLFLAGS)'
+\tcd $csubdir && \\
+\t\$(PERL) -i -pe '/\\bVERSION\\b/ and \$\$_="/* \$\$_ */" unless m(/\\*)' \\
+\tconfig.h.in && \\
+\t./configure --disable-shared --enable-static \\
+\t--enable-libthai=$enable_libthai \\
+\tCFLAGS='\$(CCFLAGS) \$(OPTIMIZE) \$(CCCDLFLAGS)'
 $csubdir/configure: $csubdir/configure.in
-	cd $csubdir && ./autogen.sh
+\tcd $csubdir && ./autogen.sh
 EOF
 }
 
@@ -38,7 +44,7 @@ if ($libthai and ($ARGV[0] || '') ne 'nolibthai') {
 } else {
     $enable_libthai = 'no';
 }
-push @opts, ('INC' => "-I./$csubdir");
+push @opts, ('INC' => "-I$csubdir/include -I$csubdir");
 
 WriteMakefile(
 	'NAME'		=> 'Unicode::LineBreak',

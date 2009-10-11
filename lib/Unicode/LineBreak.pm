@@ -6,7 +6,7 @@ require 5.008;
 ### Pragmas:
 use strict;
 use warnings;
-use vars qw($VERSION @EXPORT_OK @ISA @LB_CLASSES $Config);
+use vars qw($VERSION @EXPORT_OK @ISA $Config);
 
 ### Exporting:
 use Exporter;
@@ -114,7 +114,7 @@ my %FORMAT_FUNCS = (
 
 # Built-in behavior by L</SizingMethod> options.
 my %SIZING_FUNCS = (
-    'DEFAULT' => \&strsize,
+    'DEFAULT' => undef,
 );
 
 # Built-in urgent breaking brehaviors specified by C<UrgentBreaking>.
@@ -129,10 +129,17 @@ my %URGENT_BREAKING_FUNCS = (
     return () unless length $spc or length $str;
 
     my $max = $self->config('ColumnsMax') || 0;
+    my $sizing = $self->{SizingMethod};
+    unless (ref $sizing eq 'CODE') {
+	if ($sizing) {
+	    $sizing = $SIZING_FUNCS{$sizing};
+	}
+ 	$sizing ||= \&strsize;
+    }
     my @result = ();
 
     while (1) {
-        my $idx = $self->_sizing($len, $pre, $spc, $str, $max);
+        my $idx = &{$sizing}($self, $len, $pre, $spc, $str, $max);
         if (0 < $idx) {
 	    push @result, substr($str, 0, $idx);
 	    $str = substr($str, $idx);
@@ -182,22 +189,18 @@ my %USER_BREAKING_FUNCS = (
 );
 
 use overload
-    '%{}' => \&as_hashref;
+    '%{}' => \&as_hashref,
+    '${}' => \&as_scalarref,
+    '""' => \&as_string,
+    ;
 
 sub new {
     my $class = shift;
 
     my $self = __PACKAGE__->_new();
+    $self->config((%$Config));
     $self->config(@_);
-    $self->_reset;
     $self;
-}
-
-sub _reset ($) {
-    my $self = shift;
-    $self->{_line} = {'frg' => '', 'spc' => '', 'cols' => 0};
-    $self->{_unread} = '';
-    $self->{_sox} = 0;
 }
 
 sub break ($$) {
@@ -215,343 +218,9 @@ sub break ($$) {
     return $result . $self->break_partial(undef);
 }
 
-sub break_partial ($$) {
+sub preprocess ($$$) {
     my $self = shift;
-    my $str = shift;
-    my $eot = 0;
-
-    unless (defined $str) { 
-	$eot = 1;
-	$str = '';
-    } elsif ($str =~ /[^\x00-\x7F]/s and !is_utf8($str)) {
-        croak "Unicode string must be given."
-    }
-
-    ## Unread and additional input.
-    $str = $self->_gcstring_new($self->{_unread}.$str);
-
-    $self->_break_partial($str, $eot);
-}
-
-sub _break_partial ($$$) {
-    my $s = shift;
-    my $str = shift;
-    my $eot = shift;
-
-    # Constant.
-    my $null = Unicode::GCString->new('', $s);
-
-    ### Initialize status.
-    ## Line buffer.
-    # frg: Unbreakable text fragment.
-    # spc: Trailing spaces.
-    # cols: Number of columns of frg: It can be differ from {frg}->columns.
-    my %line = %{$s->{_line}};
-    ## ``before'' and ``after'' buffers.
-    # cls: Line breaking class.
-    # frg: Unbreakable text fragment.
-    # spc: Trailing spaces.
-    # eop: There is a mandatory breaking point at end of this buffer.
-    my %before = ('frg' => $null, 'spc' => $null);
-    my %after = ('frg' => $null, 'spc' => $null);
-    ## Start of text/paragraph status.
-    # 0: Start of text not done.
-    # 1: Start of text done while start of paragraph not done.
-    # 2: Start of paragraph done.
-    my $sox = $s->{_sox};
-
-    ## Result.
-    my $result = '';
-    ## End of substring broken by urgent breaking.
-    my $urg_end = 0;
-
-    while (1) {
-	### Chop off a pair of unbreakable character clusters from text.
-
-      CHARACTER_PAIR:
-	while (1) {
-	    my $gcls;
-
-	    # End of input.
-	    last CHARACTER_PAIR if $str->eot;
-	    # Mandatory break
-	    last CHARACTER_PAIR if defined $before{cls} and $before{eop};
-
-	    if (1) {
-		## Then, go ahead reading input.
-
-		$gcls = $str->lbclass;
-
-		#
-		# Append SP/ZW/eop to ``before'' buffer.
-		#
-		while (1) {
-		    # - Explicit breaks and non-breaks
-
-		    # LB7(1): × SP+
-		    if ($gcls == LB_SP) {
-			$before{spc} .= $str->next;
-			# Treat (sot | eop) SP+  as if it were WJ.
-			$before{cls} = LB_WJ unless defined $before{cls};
-
-			# End of input.
-			last CHARACTER_PAIR if $str->eot;
-			$gcls = $str->lbclass;
-		    }
-
-		    # - Mandatory breaks
-
-		    # LB4 - LB7: × SP* (BK | CR LF | CR | LF | NL) !
-		    if ($gcls == LB_BK or $gcls == LB_CR or $gcls == LB_LF or
-			$gcls == LB_NL) {
-			$before{spc} .= $str->next;
-			$before{cls} = $gcls;
-			$before{eop} = 1
-			    unless !$eot and $gcls == LB_CR and $str->eot;
-			last CHARACTER_PAIR;
-		    }
-
-		    # - Explicit breaks and non-breaks
-
-		    # LB7(2): × (SP* ZW+)+
-		    if ($gcls == LB_ZW) {
-			$before{frg} .= $before{spc}.($str->next);
-			$before{spc} = $null;
-			$before{cls} = $gcls;
-
-			# End of input
-			last CHARACTER_PAIR if $str->eot;
-			$gcls = $str->lbclass;
-			next;
-		    }
-		    last;
-		} # while (1)
-
-		#
-		# Then fill ``after'' buffer.
-		#
-
-		# - Rules for other line breaking classes
-
-		# LB1: Assign a line breaking class to each characters.
-		%after = ('frg' => $str->next, 'spc' => $null);
-
-		# - Combining marks  
-		# LB9: Treat X CM+ as if it were X  
-		# where X is anything except BK, CR, LF, NL, SP or ZW  
-		# (NB: Some CM characters may be single grapheme cluster
-		# since they have Grapheme_Cluster_Break property Control.)
-		while (!$str->eot) {  
-		    last unless $str->lbclass eq LB_CM;
-		    $after{frg} .= $str->next;
-		}
-		# Legacy-CM: Treat SP CM+ as if it were ID.  cf. [UAX #14] 9.1.
-		# LB10: Treat any remaining CM+ as if it were AL.
-		if ($gcls == LB_CM) {
-		    if ($s->config('LegacyCM') and
-			defined $before{cls} and $before{spc}->length and
-			$before{spc}->substr(-1)->lbclass == LB_SP) {
-			$after{frg} = $before{spc}->substr(-1).$after{frg};
-			$after{cls} = LB_ID;
-
-			# clear ``before'' buffer if it was empty.
-			$before{spc} =
-			    $before{spc}->substr(0, -1);
-			$before{cls} = undef
-			    unless $before{frg}->length or
-			    $before{spc}->length;
-		    } else {
-			$after{cls} = LB_AL;
-		    }
-		# LB27: Treat hangul syllable as if it were ID (or AL).
-		} elsif ($gcls == LB_H2 or $gcls == LB_H3 or
-			 $gcls == LB_JL or $gcls == LB_JV or $gcls == LB_JT) {
-		    $after{cls} =
-			$s->config('HangulAsAL')? LB_AL: LB_ID;
-		} else {
-		    $after{cls} = $gcls;
-		}
-	    } # if (1)
-
-	    # - Start of text
-
-	    # LB2: sot ×
-	    last if defined $before{cls};
-
-	    # shift buffers.
-	    %before = (%after);
-	    %after = ('frg' => $null, 'spc' => $null);
-	} # CHARACTER_PAIR: while (1)
-
-	## Determin line breaking action by classes of adjacent characters.
-
-	my $action;
-
-	# Mandatory break.
-	if ($before{eop}) {
-	    $action = MANDATORY;
-	# LB11 - LB29 and LB31: Tailorable rules (except LB11, LB12).
-        # Or custom/complex breaking.
-	} elsif (defined $after{cls}) {
-	    if ($after{frg}->flag(0) & BREAK_BEFORE) {
-		$action = DIRECT;
-	    } elsif ($after{frg}->flag(0) & PROHIBIT_BEFORE) {
-		$action = PROHIBITED;
-	    } else {
-		$action = $s->lbrule($before{cls}, $after{cls});
-	    }
-
-	    # Check prohibited break.
-	    if ($action == PROHIBITED or
-		($action == INDIRECT and $before{spc}->length == 0)) {
-
-		# When conjunction of $before{frg} and $after{frg} is
-		# expected to exceed CharactersMax, try urgent breaking.
-		my $bsa = $before{frg}.$before{spc}.$after{frg};
-		if ($s->config('CharactersMax') < $bsa->chars) {
-		    my @c = $s->_urgent_break(0, '', '', $after{cls},
-					      $bsa, $after{spc});
-		    my $broken = $null;
-		    foreach my $c (@c) {
-			$c->flag(0, BREAK_BEFORE);
-			my $max = $s->config('CharactersMax');
-			# If any of urgently broken fragments still
-			# exceed CharactersMax, force chop them.
-			if ($max and $max < $c->chars) {
-			    while ($max < $c->chars and
-				   $s->lbclass(substr($c->as_string, $max))
-				   == LB_CM) {
-				$max++;
-			    }
-			    my $substr = substr("$c", 0, $max); #FIXME:
-			    my $brk = Unicode::GCString->new($substr, $s);
-			    $c->flag($brk->length, BREAK_BEFORE);
-			}
-			$broken .= $c;
-		    }
-		    my $l = ($bsa.$after{spc})->length;
-		    my $newpos = $str->pos - $l;
-		    $urg_end = $str->pos;
-		    $str->substr($newpos, $l, $broken);
-		    $str->pos($newpos);
-		    %before = ('frg' => $null, 'spc' => $null);
-		    %after = ('frg' => $null, 'spc' => $null);
-		    next;
-		} 
-		# Otherwise, fragments may be conjuncted safely.  Read more.
-		my $frg = $before{frg}.$before{spc}.$after{frg};
-		%before = (%after); $before{frg} = $frg;
-		%after = ('frg' => $null, 'spc' => $null);
-		next;
-	    } # if ($action == PROHIBITED or ...)
-	} # if ($before{eop})
-
-        # Check end of input.
-        if (!$eot and !defined $after{cls} and $str->eot) {
-	    # Save status then output partial result.
-	    $s->{_line} = \%line;
-	    $s->{_unread} = ($before{frg}.$before{spc})->as_string;
-	    $s->{_sox} = $sox;
-	    return $result;
-        }
-
-	# After all, possible actions are MANDATORY and other arbitrary.
-
-	### Examine line breaking action
-
-	if ($sox == 0) { # sot undone.
-	    # Process start of text.
-	    $before{frg} = $s->_format('sot', $before{frg});
-	    $sox = 1;
-	} elsif ($sox == 1) { # sop undone.
-	    # Process start of paragraph.
-	    $before{frg} = $s->_format('sop', $before{frg});
-	    $sox = 2;
-	}
-
-	# Check if arbitrary break is needed.
-	my $newcols = $s->_sizing($line{cols}, $line{frg}, $line{spc},
-				  $before{frg});
-	if ($s->config('ColumnsMax') and $s->config('ColumnsMax') < $newcols) {
-	    $newcols = $s->_sizing(0, '', '', $before{frg}); 
-
-	    # When arbitrary break is expected to generate very short line,
-	    # or when $before{frg} will exceed ColumnsMax, try urgent breaking.
-	    if ($urg_end < $str->pos - ($after{frg}.$after{spc})->length) {
-		my @c = ();
-		if ($line{cols} and $line{cols} < $s->config('ColumnsMin')) {
-		    @c = $s->_urgent_break($line{cols}, $line{frg}, $line{spc},
-					   $before{cls}, $before{frg},
-					   $before{spc});
-		} elsif ($s->config('ColumnsMax') < $newcols) {
-		    @c = $s->_urgent_break(0, '', '',
-					   $before{cls}, $before{frg},
-					   $before{spc});
-		}
-		if (scalar @c) {
-		    my $broken = $null;
-		    foreach my $c (@c) {
-			$c->flag(0, BREAK_BEFORE) unless $c->flag(0);
-			$broken .= $c;
-		    }
-		    my $blen = ($before{frg}.$before{spc})->length;
-		    my $alen = ($after{frg}.$after{spc})->length;
-		    my $newpos = $str->pos - ($blen + $alen);
-		    $urg_end = $newpos + $broken->length;
-		    $str->substr($newpos, $blen, $broken);
-		    $str->pos($newpos);
-		    %before = ('frg' => $null, 'spc' => $null);
-		    %after = ('frg' => $null, 'spc' => $null);
-		    next;
-		}
-	    }
-
-	    # Otherwise, process arbitrary break.
-	    if (length $line{frg} or length $line{spc}) {
-		$result .= $s->_format('', $line{frg})->as_string;
-		$result .= $s->_format('eol', $line{spc})->as_string;
-		my $bak = $before{frg};
-		$before{frg} = $s->_format('sol', $before{frg});
-		$newcols = $s->_sizing(0, '', '', $before{frg})
-		    unless $bak eq $before{frg};
-	    }
-	    %line = ('frg' => $before{frg},
-		     'spc' => $before{spc}, 'cols' => $newcols);
-	# Arbitrary break is not needed.
-	} else {
-	    %line = ('frg' => $line{frg}.$line{spc}.$before{frg},
-		     'spc' => $before{spc},
-		     'cols' => $newcols);
-	} # if ($s->config('ColumnsMax') and ...)
-
-	# Mandatory break or end-of-text.
-	if ($eot and !defined $after{cls} and $str->eot) {
-	    last;
-	}
-	if ($action == MANDATORY) {
-	    # Process mandatory break.
-	    $result .= $s->_format('', $line{frg})->as_string;
-	    $result .= $s->_format('eop', $line{spc})->as_string;
-	    $sox = 1; # eop done then sop must be carried out.
-	    %line = ('frg' => '', 'spc' => '', 'cols' => 0);
-	}
-
-	# Shift buffers.
-	%before = (%after);
-	%after = ('frg' => $null, 'spc' => $null);
-    } # TEXT: while (1)
-
-    # Process end of text.
-    $result .= $s->_format('', $line{frg})->as_string;
-    $result .= $s->_format('eot', $line{spc})->as_string;
-
-    ## Reset status then return the rest of result.
-    $s->_reset;
-    $result;
-}
-
-sub _gcstring_new ($$) {
-    my $self = shift;
+    my $user_funcs = shift;
     my $str = shift;
 
     if (ref $str) {
@@ -565,7 +234,7 @@ sub _gcstring_new ($$) {
     while (length $str) {
 	my $func;
 	my ($s, $match, $post) = ($str, '', '');
-	foreach my $ub (@{$self->config('_user_breaking_funcs')}) {
+	foreach my $ub (@{$user_funcs}) {
 	    my ($re, $fn) = @{$ub};
 	    if ($str =~ /$re/) {
 		if (length $& and length $` < length $s) { #`
@@ -581,12 +250,7 @@ sub _gcstring_new ($$) {
 	    $str = '';
 	}
 
-	# Break unmatched fragment.
-	if (length $s) {
-	    $s = Unicode::GCString->new($s, $self);
-	    $s = Unicode::LineBreak::SouthEastAsian::flagbreak($s);
-	    $ret .= $s;
-	}
+	$ret .= $s if length $s;
 
 	# Break matched fragment.
 	if (length $match) {
@@ -632,19 +296,14 @@ sub config ($@) {
 
     # Set config.
     my %params = @_;
+    my %copts = ();
     my %config = ();
     my $k;
-    foreach $k (@uopts) {
-	$self->{$k} = $Config->{$k} unless defined $self->{$k};
-    }
-    foreach $k (@nopts) {
-	$config{$k} = $Config->{$k};
-    }
     foreach $k (keys %params) {
 	my $v = $params{$k};
-
 	if ($uopts{uc $k}) {
 	    $self->{$uopts{uc $k}} = $v;
+	    $copts{$uopts{uc $k}} = $v;
 	} else {
 	    $config{$nopts{uc $k} || $k} = $v;
 	}
@@ -652,96 +311,106 @@ sub config ($@) {
 
     ## Utility options.
     # Format method.
-    if (ref $self->{Format} eq 'CODE') {
-	$config{_format_func} = $self->{Format};
-    } else {
-	$self->{Format} = uc $self->{Format};
-	$config{_format_func} =
-	    $FORMAT_FUNCS{$self->{Format}} || $FORMAT_FUNCS{'DEFAULT'};
+    if (defined $copts{Format}) {
+	if (ref $copts{Format} eq 'CODE') {
+	    $config{Format} = $copts{Format};
+	} else {
+	    $config{Format} =
+		$FORMAT_FUNCS{uc $copts{Format}} ||
+		$FORMAT_FUNCS{'DEFAULT'};
+	}
     }
     # Sizing method
-    if (ref $self->{SizingMethod} eq 'CODE') {
-	$config{_sizing_func} = $self->{SizingMethod};
-    } else {
-	$self->{SizingMethod} = uc $self->{SizingMethod};
-	$config{_sizing_func} =
-	    $SIZING_FUNCS{$self->{SizingMethod}} || $SIZING_FUNCS{'DEFAULT'};
+    if (defined $copts{SizingMethod}) {
+	if (ref $copts{SizingMethod} eq 'CODE') {
+	    $config{SizingMethod} = $copts{SizingMethod};
+	} else {
+	    $config{SizingMethod} =
+		$SIZING_FUNCS{uc $copts{SizingMethod}} ||
+		$SIZING_FUNCS{'DEFAULT'};
+	}
     }
     # Urgent break
-    if (ref $self->{UrgentBreaking} eq 'CODE') {
-	$config{_urgent_breaking_func} = $self->{UrgentBreaking};
-    } else {
-	$self->{UrgentBreaking} = uc $self->{UrgentBreaking};
-	$config{_urgent_breaking_func} =
-	    $URGENT_BREAKING_FUNCS{$self->{UrgentBreaking}} || undef;
+    if (defined $copts{UrgentBreaking}) {
+	if (ref $copts{UrgentBreaking} eq 'CODE') {
+	    $config{UrgentBreaking} = $copts{UrgentBreaking};
+	} else {
+	    $config{UrgentBreaking} =
+		$URGENT_BREAKING_FUNCS{uc $copts{UrgentBreaking}} || undef;
+	}
     }
     # Custom break
-    $self->{UserBreaking} = [$self->{UserBreaking}]
-	unless ref $self->{UserBreaking} eq 'ARRAY';
-    my @cf = ();
-    foreach my $ub (@{$self->{UserBreaking}}) {
-	next unless defined $ub;
-	unless (ref $ub eq 'ARRAY') {
-	    $ub = $USER_BREAKING_FUNCS{uc $ub};
+    if (defined $copts{UserBreaking}) {
+	$copts{UserBreaking} = [$copts{UserBreaking}]
+	    unless ref $copts{UserBreaking} eq 'ARRAY';
+	my @cf = ();
+	foreach my $ub (@{$self->{UserBreaking}}) {
 	    next unless defined $ub;
+	    unless (ref $ub eq 'ARRAY') {
+		$ub = $USER_BREAKING_FUNCS{uc $ub};
+		next unless defined $ub;
+	    }
+	    my ($re, $func) = @{$ub};
+	    push @cf, [qr{$re}o, $func];
 	}
-	my ($re, $func) = @{$ub};
-	push @cf, [qr{$re}o, $func];
+	$config{UserBreaking} = \@cf;
     }
-    $config{_user_breaking_funcs} = \@cf;
-
     # Character classes
-    my %map = ();
-    foreach my $o (qw{TailorLB TailorEA}) {
-	$self->{$o} = [@{$Config->{$o}}]
-	    unless defined $self->{$o} and ref $self->{$o} eq 'ARRAY';
-	my @v = @{$self->{$o}};
-	while (scalar @v) {
-	    my $k = shift @v;
-	    my $v = shift @v;
-	    next unless defined $k and defined $v;
-	    if (ref $k eq 'ARRAY') {
-		foreach my $c (@{$k}) {
-		    $map{$c} ||= [-1, -1];
+    if (defined $copts{TailorLB} or defined $copts{TailorEA}) {
+	$copts{TailorLB} ||= $self->{TailorLB};
+	$copts{TailorEA} ||= $self->{TailorEA};
+	my %map = ();
+	foreach my $o (qw{TailorLB TailorEA}) {
+	    $copts{$o} = [@{$Config->{$o}}]
+		unless defined $copts{$o} and ref $copts{$o} eq 'ARRAY';
+	    my @v = @{$copts{$o}};
+	    while (scalar @v) {
+		my $k = shift @v;
+		my $v = shift @v;
+		next unless defined $k and defined $v;
+		if (ref $k eq 'ARRAY') {
+		    foreach my $c (@{$k}) {
+			$map{$c} ||= [-1, -1];
+			if ($o eq 'TailorLB') {
+			    $map{$c}->[0] = $v;
+			} else {
+			    $map{$c}->[1] = $v;
+			}
+		    }
+		} else {
+		    $map{$k} ||= [-1, -1];
 		    if ($o eq 'TailorLB') {
-			$map{$c}->[0] = $v;
+			$map{$k}->[0] = $v;
 		    } else {
-			$map{$c}->[1] = $v;
+			$map{$k}->[1] = $v;
 		    }
 		}
+	    }
+	}
+	my @map = ();
+	my ($beg, $end) = (undef, undef);
+	my $p;
+	foreach my $c (sort {$a <=> $b} keys %map) {
+	    unless ($map{$c}) {
+		next;
+	    } elsif (defined $end and $end + 1 == $c and
+		     $p->[0] == $map{$c}->[0] and $p->[1] == $map{$c}->[1]) {
+		$end = $c;
 	    } else {
-		$map{$k} ||= [-1, -1];
-		if ($o eq 'TailorLB') {
-		    $map{$k}->[0] = $v;
-		} else {
-		    $map{$k}->[1] = $v;
+		if (defined $beg and defined $end) {
+		    push @map, [$beg, $end, @{$p}];
 		}
+		$beg = $end = $c;
+		$p = $map{$c};
 	    }
 	}
-    }
-    my @map = ();
-    my ($beg, $end) = (undef, undef);
-    my $p;
-    foreach my $c (sort {$a <=> $b} keys %map) {
-	unless ($map{$c}) {
-	    next;
-	} elsif (defined $end and $end + 1 == $c and
-		 $p->[0] == $map{$c}->[0] and $p->[1] == $map{$c}->[1]) {
-	    $end = $c;
-	} else {
-	    if (defined $beg and defined $end) {
-		push @map, [$beg, $end, @{$p}];
-	    }
-	    $beg = $end = $c;
-	    $p = $map{$c};
+	if (defined $beg and defined $end) {
+	    push @map, [$beg, $end, @{$p}];
 	}
+	$config{_map} = \@map;
     }
-    if (defined $beg and defined $end) {
-	push @map, [$beg, $end, @{$p}];
-    }
-    $config{_map} = \@map;
 
-    &_config($self, (%config));
+    $self->_config((%config)) if scalar keys %config;
 }
 
 sub context (@) {
@@ -770,60 +439,6 @@ sub context (@) {
 	$context = 'NONEASTASIAN';
     }
     $context;
-}
-
-sub _format ($$$) {
-    my $self = shift;
-    my $action = shift || '';
-    my $frg = shift;
-
-    my $result;
-    local $@;
-
-    $frg = Unicode::GCString->new($frg, $self) unless ref $frg;
-    eval {
-	$result = &{$self->config('_format_func')}($self, $action, $frg);
-    };
-    if ($@) {
-	carp $@;
-	$result = $frg;
-    } elsif (!defined $result or $result eq $frg) {
-	$result = $frg;
-    }
-
-    $result = Unicode::GCString->new($result, $self) if !ref $result;
-    return $result;
-}
-
-sub _urgent_break ($$$$$$$) {
-    my $self = shift;
-    my $l_len = shift;
-    my $l_frg = shift;
-    my $l_spc = shift;
-    my $cls = shift;
-    my $frg = shift;
-    my $spc = shift;
-
-    if (ref $self->config('_urgent_breaking_func')) {
-	my @broken = map
-	{ $_ = Unicode::GCString->new($_, $self) unless ref $_; $_ }
-	&{$self->config('_urgent_breaking_func')}($self, $l_len, $l_frg, $l_spc, $frg);
-	if (scalar @broken) {
-	    $broken[$#broken] .= $spc;
-	} else {
-	    @broken = ($frg.$spc);
-	}
-	return @broken;
-    }
-
-    return ($frg.$spc);
-}
-
-sub _sizing ($$$$$;$) {
-    my $self = shift;
-    my $size = &{$self->config('_sizing_func')}($self, @_);
-    $size = $self->strsize(@_) unless defined $size;
-    $size;
 }
 
 1;

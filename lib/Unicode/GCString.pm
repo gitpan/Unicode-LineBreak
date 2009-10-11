@@ -31,6 +31,7 @@ our $VERSION = '0.004_01';
 
 use overload 
     '@{}' => \&as_arrayref,
+    '${}' => \&as_scalarref,
     '""' => \&as_string,
     '.' => \&concat,
     #XXX'.=' => \&concat, #FIXME:segfault
@@ -164,7 +165,7 @@ If REPLACEMENT is specified, substring is replaced by it.
 I<Instance method>.
 Convert grapheme cluster string to an array of grapheme clusters.
 
-=item eot
+=item eos
 
 I<Instance method>.
 Test if current position is at end of grapheme cluster string.
