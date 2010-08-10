@@ -1,3 +1,9 @@
+1.008_01  Tue Aug 10 2010
+
+	* Update UCD to 6.0.0beta at Jun 21.
+	* Check if libthai is broken on compile time.
+	* Small fixes on docs.
+
 1.007.520  Wed Dec 30 2009
 
 	* Fix: Text::LineFold: Newline option doesn't have effect for fold()
