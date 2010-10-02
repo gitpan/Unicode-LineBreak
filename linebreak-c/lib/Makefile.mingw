@@ -10,7 +10,7 @@ OBJECTS = break.o charprop.o gcstring.o linebreak.o southeastasian.o \
 all: libinebreak.a
 
 libinebreak.a: $(OBJECTS)
-	$(AR) rc $@ $<
+	$(AR) crs $@ $<
 
 clean:
 	rm -f *.a *.o

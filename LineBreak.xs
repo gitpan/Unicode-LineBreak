@@ -1,7 +1,7 @@
 /*
  * LineBreak.xs - Perl XS glue for Linebreak package.
  * 
- * Copyright (C) 2009 Hatuka*nezumi - IKEDA Soji <hatuka(at)nezumi.nu>.
+ * Copyright (C) 2009, 2010 Hatuka*nezumi - IKEDA Soji <hatuka(at)nezumi.nu>.
  * 
  * This file is part of the Unicode::LineBreak package.  This program is
  * free software; you can redistribute it and/or modify it under the same
@@ -609,6 +609,30 @@ gcstring_t *urgent_func_FORCE(linebreak_t *lbobj, double cols,
 
 
 MODULE = Unicode::LineBreak	PACKAGE = Unicode::LineBreak	
+
+void
+_propvals(prop)
+	char *prop;
+    PROTOTYPE: $
+    INIT:
+	char **p;
+	extern char *linebreak_propvals_EA[], *linebreak_propvals_GB[],
+	    *linebreak_propvals_LB[], *linebreak_propvals_SC[];
+    PPCODE:
+	if (strcasecmp(prop, "EA") == 0)
+	    for (p = linebreak_propvals_EA; *p; p++)
+		XPUSHs(sv_2mortal(newSVpv(*p, 0)));
+	else if (strcasecmp(prop, "GB") == 0)
+	    for (p = linebreak_propvals_GB; *p; p++)
+		XPUSHs(sv_2mortal(newSVpv(*p, 0)));
+	else if (strcasecmp(prop, "LB") == 0)
+	    for (p = linebreak_propvals_LB; *p; p++)
+		XPUSHs(sv_2mortal(newSVpv(*p, 0)));
+	else if (strcasecmp(prop, "SC") == 0)
+	    for (p = linebreak_propvals_SC; *p; p++)
+		XPUSHs(sv_2mortal(newSVpv(*p, 0)));
+	else
+	    croak("_propvals: Unknown property name: %s", prop);
 
 SV *
 _new(klass)

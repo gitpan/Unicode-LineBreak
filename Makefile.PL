@@ -4,8 +4,8 @@ use strict;
 package MY;
 use ExtUtils::MakeMaker;
 
-my $csubdir = 'linebreak';
-my $linebreak_atleast_version = '1.8';
+my $csubdir = 'linebreak-c';
+my $linebreak_atleast_version = '1.8.1';
 my $pkg_config = $ENV{'PKG_CONFIG'} || 'pkg-config';
 my @args = ();
 my $enable_libthai = 'yes';
@@ -98,7 +98,7 @@ if ($^O eq 'MSWin32') {
 WriteMakefile(
 	'NAME'		=> 'Unicode::LineBreak',
 	'ABSTRACT_FROM'	=> 'lib/Unicode/LineBreak.pod',
-	'VERSION_FROM'	=> 'lib/Unicode/LineBreak/Version.pm',
+	'VERSION_FROM'	=> 'lib/Unicode/LineBreak.pm',
 	'AUTHOR'	=> q{Hatuka*nezumi - IKEDA Soji <hatuka@nezumi.nu>},
 	'LICENSE'	=> 'perl',
 	'PREREQ_PM'	=> {

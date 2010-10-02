@@ -378,7 +378,7 @@ for (my $idx = 0; $idx < 0x20000; $idx += BLKLEN) {
 
 ### Output
 
-open DATA_C, '>', "../linebreak/lib/$version.c" or die $!;
+open DATA_C, '>', "../lib/$version.c" or die $!;
 
 # Print postamble.
 print DATA_C <<"EOF";
@@ -391,6 +391,29 @@ print DATA_C <<"EOF";
 const char *linebreak_unicode_version = UNICODE_VERSION;
 
 EOF
+
+# Print property values.
+foreach my $k (sort keys %indexedclasses) {
+    my $output = '';
+    my $line = '    ';
+    my @propvals = @{$indexedclasses{$k}->{$version}};
+    push @propvals, qw(SG AI SA XX)
+	if uc($k) eq 'LB';
+    foreach my $v (@propvals) {
+	if (76 < 4 + length($line) + length($v)) {
+	    $output .= "$line\n";
+	    $line = '    ';
+	}
+	$line .= "\"$v\", ";
+    }
+    $line .= "\n    "
+	if 76 < length($line) + 4;
+    $output .= "${line}NULL";
+    print DATA_C "const char *linebreak_propvals_".uc($k)."[] = {\n";
+    print DATA_C "$output\n";
+    print DATA_C "};\n";
+}
+print DATA_C "\n";
 
 # print rule map.
 my $clss = join '', map { /(.)(.)/; $1.lc($2); } @LBCLASSES;

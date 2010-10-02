@@ -3,7 +3,6 @@
  */
 #ifndef _LINEBREAK_CONSTANTS_H_
 
-/* <<< */
 #define LB_BK ((propval_t)0)
 #define LB_CR ((propval_t)1)
 #define LB_LF ((propval_t)2)
@@ -77,8 +76,6 @@
 #define SC_Tai_Tham ((propval_t)11)
 #define SC_Tai_Viet ((propval_t)12)
 
-
-/* >>> */
 
 #define _LINEBREAK_CONSTANTS_H_
 #endif /* _LINEBREAK_CONSTANTS_H_ */
