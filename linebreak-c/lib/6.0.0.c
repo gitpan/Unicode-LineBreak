@@ -3,7 +3,7 @@
  */
 
 #include "linebreak_defs.h"
-#define UNICODE_VERSION "6.0.0beta"
+#define UNICODE_VERSION "6.0.0"
 const char *linebreak_unicode_version = UNICODE_VERSION;
 
 const char *linebreak_propvals_EA[] = {

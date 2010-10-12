@@ -1528,7 +1528,7 @@ ac_compiler_gnu=$ac_cv_c_compiler_gnu
 
 
 
-DEFAULT_UNICODE_VERSION="6.0.0beta"
+DEFAULT_UNICODE_VERSION="6.0.0"
 LPATH="$PATH:/usr/local/bin"
 
 am__api_version="1.9"

@@ -1,4 +1,5 @@
-1.8.1	XXX XXX XX 2010
+1.8.1	Mon Oct 11 2010
+	* update Unicode data to version 6.0.0.
 	* update config.sub & config.guess.
 	* renamed: include/linebreak_defs.h, libinebreak.
 	* added linebreak.spec.in.

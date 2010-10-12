@@ -1,7 +1,7 @@
 #-*- Makefile -*-
 
-UNICODE_VERSIONS = 5.1.0 5.2.0 6.0.0beta
-CURRENT_UNICODE_VERSION = 6.0.0beta
+UNICODE_VERSIONS = 5.1.0 5.2.0 6.0.0
+CURRENT_UNICODE_VERSION = 6.0.0
 
 WGET = wget
 UCD_BASE = http://www.unicode.org/Public/$(UNICODE_VERSION)/ucd/
