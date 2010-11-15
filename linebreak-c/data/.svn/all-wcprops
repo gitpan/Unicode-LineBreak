@@ -1,0 +1,89 @@
+K 25
+svn:wc:ra_dav:version-url
+V 37
+/svn/linebreak/!svn/ver/78/trunk/data
+END
+EastAsianWidth-5.1.0.custom
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/linebreak/!svn/ver/74/trunk/data/EastAsianWidth-5.1.0.custom
+END
+EastAsianWidth-6.0.0.custom
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/linebreak/!svn/ver/78/trunk/data/EastAsianWidth-6.0.0.custom
+END
+EastAsianWidth-5.2.0.custom
+K 25
+svn:wc:ra_dav:version-url
+V 65
+/svn/linebreak/!svn/ver/74/trunk/data/EastAsianWidth-5.2.0.custom
+END
+data.pl
+K 25
+svn:wc:ra_dav:version-url
+V 45
+/svn/linebreak/!svn/ver/74/trunk/data/data.pl
+END
+LineBreak-5.1.0.custom
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/linebreak/!svn/ver/74/trunk/data/LineBreak-5.1.0.custom
+END
+LineBreak-6.0.0.custom
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/linebreak/!svn/ver/78/trunk/data/LineBreak-6.0.0.custom
+END
+custom.pl
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/svn/linebreak/!svn/ver/74/trunk/data/custom.pl
+END
+LineBreak-5.2.0.custom
+K 25
+svn:wc:ra_dav:version-url
+V 60
+/svn/linebreak/!svn/ver/74/trunk/data/LineBreak-5.2.0.custom
+END
+constants.pl
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/svn/linebreak/!svn/ver/76/trunk/data/constants.pl
+END
+Rules-5.1.0.txt
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/linebreak/!svn/ver/74/trunk/data/Rules-5.1.0.txt
+END
+Rules-6.0.0.txt
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/linebreak/!svn/ver/78/trunk/data/Rules-6.0.0.txt
+END
+Rules-5.2.0.txt
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/linebreak/!svn/ver/74/trunk/data/Rules-5.2.0.txt
+END
+LBCLASSES
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/svn/linebreak/!svn/ver/78/trunk/data/LBCLASSES
+END
+makefile
+K 25
+svn:wc:ra_dav:version-url
+V 46
+/svn/linebreak/!svn/ver/78/trunk/data/makefile
+END

@@ -1,0 +1,143 @@
+K 25
+svn:wc:ra_dav:version-url
+V 32
+/svn/linebreak/!svn/ver/79/trunk
+END
+configure
+K 25
+svn:wc:ra_dav:version-url
+V 42
+/svn/linebreak/!svn/ver/79/trunk/configure
+END
+Makefile.in
+K 25
+svn:wc:ra_dav:version-url
+V 44
+/svn/linebreak/!svn/ver/74/trunk/Makefile.in
+END
+AUTHORS
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/svn/linebreak/!svn/ver/74/trunk/AUTHORS
+END
+depcomp
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/svn/linebreak/!svn/ver/74/trunk/depcomp
+END
+ChangeLog
+K 25
+svn:wc:ra_dav:version-url
+V 42
+/svn/linebreak/!svn/ver/79/trunk/ChangeLog
+END
+compile
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/svn/linebreak/!svn/ver/74/trunk/compile
+END
+linebreak.spec.in
+K 25
+svn:wc:ra_dav:version-url
+V 50
+/svn/linebreak/!svn/ver/74/trunk/linebreak.spec.in
+END
+config.guess
+K 25
+svn:wc:ra_dav:version-url
+V 45
+/svn/linebreak/!svn/ver/74/trunk/config.guess
+END
+ltmain.sh
+K 25
+svn:wc:ra_dav:version-url
+V 42
+/svn/linebreak/!svn/ver/77/trunk/ltmain.sh
+END
+Makefile.mingw
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/svn/linebreak/!svn/ver/74/trunk/Makefile.mingw
+END
+README
+K 25
+svn:wc:ra_dav:version-url
+V 39
+/svn/linebreak/!svn/ver/74/trunk/README
+END
+config.sub
+K 25
+svn:wc:ra_dav:version-url
+V 43
+/svn/linebreak/!svn/ver/74/trunk/config.sub
+END
+config.h.in
+K 25
+svn:wc:ra_dav:version-url
+V 44
+/svn/linebreak/!svn/ver/74/trunk/config.h.in
+END
+linebreak.pc.in
+K 25
+svn:wc:ra_dav:version-url
+V 48
+/svn/linebreak/!svn/ver/74/trunk/linebreak.pc.in
+END
+configure.ac
+K 25
+svn:wc:ra_dav:version-url
+V 45
+/svn/linebreak/!svn/ver/79/trunk/configure.ac
+END
+INSTALL
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/svn/linebreak/!svn/ver/74/trunk/INSTALL
+END
+COPYING
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/svn/linebreak/!svn/ver/74/trunk/COPYING
+END
+Makefile.am
+K 25
+svn:wc:ra_dav:version-url
+V 44
+/svn/linebreak/!svn/ver/74/trunk/Makefile.am
+END
+missing
+K 25
+svn:wc:ra_dav:version-url
+V 40
+/svn/linebreak/!svn/ver/74/trunk/missing
+END
+config.h.mingw
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/svn/linebreak/!svn/ver/74/trunk/config.h.mingw
+END
+NEWS
+K 25
+svn:wc:ra_dav:version-url
+V 37
+/svn/linebreak/!svn/ver/74/trunk/NEWS
+END
+aclocal.m4
+K 25
+svn:wc:ra_dav:version-url
+V 43
+/svn/linebreak/!svn/ver/74/trunk/aclocal.m4
+END
+install-sh
+K 25
+svn:wc:ra_dav:version-url
+V 43
+/svn/linebreak/!svn/ver/74/trunk/install-sh
+END

@@ -1,0 +1,59 @@
+K 25
+svn:wc:ra_dav:version-url
+V 36
+/svn/linebreak/!svn/ver/79/trunk/lib
+END
+charprop.c
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/svn/linebreak/!svn/ver/74/trunk/lib/charprop.c
+END
+gcstring.c
+K 25
+svn:wc:ra_dav:version-url
+V 47
+/svn/linebreak/!svn/ver/74/trunk/lib/gcstring.c
+END
+5.1.0.c
+K 25
+svn:wc:ra_dav:version-url
+V 44
+/svn/linebreak/!svn/ver/74/trunk/lib/5.1.0.c
+END
+6.0.0.c
+K 25
+svn:wc:ra_dav:version-url
+V 44
+/svn/linebreak/!svn/ver/78/trunk/lib/6.0.0.c
+END
+5.2.0.c
+K 25
+svn:wc:ra_dav:version-url
+V 44
+/svn/linebreak/!svn/ver/74/trunk/lib/5.2.0.c
+END
+break.c
+K 25
+svn:wc:ra_dav:version-url
+V 44
+/svn/linebreak/!svn/ver/74/trunk/lib/break.c
+END
+southeastasian.c
+K 25
+svn:wc:ra_dav:version-url
+V 53
+/svn/linebreak/!svn/ver/74/trunk/lib/southeastasian.c
+END
+Makefile.mingw
+K 25
+svn:wc:ra_dav:version-url
+V 51
+/svn/linebreak/!svn/ver/79/trunk/lib/Makefile.mingw
+END
+linebreak.c
+K 25
+svn:wc:ra_dav:version-url
+V 48
+/svn/linebreak/!svn/ver/74/trunk/lib/linebreak.c
+END
