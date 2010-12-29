@@ -87,7 +87,7 @@ sub inclusive2re {
 sub exclusive2re {
     my $class = shift;
     $class =~ s/^\s+//; $class =~ s/\s+$//;
-    my @class = split /\s*\|\s*/, $class;
+    my @class = split /\s+/, $class;
     my %class;
 
     foreach my $c (@class) {
@@ -123,7 +123,6 @@ foreach my $b (@LBCLASSES) {
 		    $direct = 1 unless defined $direct;
 		}
 	    }
-
 	    if ("SP" =~ /$before/ and $a =~ /$after/) {
 		if ($action == DIRECT_ALLOWED) {
 		    $indirect = 1 unless defined $indirect;
@@ -132,7 +131,6 @@ foreach my $b (@LBCLASSES) {
 		    $indirect = 0 unless defined $indirect;
 		}
 	    }
-
 	    last if defined $direct and defined $indirect;
 	}
 	my $action;
