@@ -1,3 +1,7 @@
+1.10	Sat Jan 01 2011
+	* Added LINEBREAK_OPTION_BREAK_INDENT option.
+	* Fix SA segmentaion behavior.
+
 1.9	Wed Dec 29 2010
 	* BUG FIX: broken pair tables.
 	* updated config.sub & config.guess.

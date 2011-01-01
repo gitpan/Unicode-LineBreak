@@ -3,7 +3,7 @@ libinebreak_la_SOURCES = lib/break.c lib/charprop.c lib/gcstring.c \
 			  lib/linebreak.c lib/southeastasian.c \
 			  lib/@UNICODE_VERSION@.c
 libinebreak_la_CFLAGS = -I. -Iinclude @LIBTHAI_CFLAGS@
-libinebreak_la_LDFLAGS = -version-info 1:1:0 @LIBTHAI_LIBS@
+libinebreak_la_LDFLAGS = -version-info 2:0:1 @LIBTHAI_LIBS@
 #if !HAVE_STRERROR
 #libinebreak_la_SOURCES += src/strerror.c
 #endif

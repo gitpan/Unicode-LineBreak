@@ -1,7 +1,7 @@
 /*
  * southeastasian.c - interfaces for South East Asian complex breaking.
  * 
- * Copyright (C) 2009 by Hatuka*nezumi - IKEDA Soji.  All rights reserved.
+ * Copyright (C) 2009-2011 by Hatuka*nezumi - IKEDA Soji.
  *
  * This file is part of the Linebreak Package.  This program is free
  * software; you can redistribute it and/or modify it under the terms
@@ -37,7 +37,7 @@ void linebreak_southeastasian_flagbreak(gcstring_t *gcstr)
 #ifdef USE_LIBTHAI
     wchar_t *buf;
     size_t i, j, k;
-    int brk;
+    int brk, sa;
 
     if (gcstr == NULL || gcstr->gclen == 0)
 	return;
@@ -50,6 +50,7 @@ void linebreak_southeastasian_flagbreak(gcstring_t *gcstr)
     k = i;
 
     /* Flag breaking points. */
+    sa = 0;
     for (i = 0, j = 0; buf[j] && th_wbrk(buf + j, &brk, 1); j += brk) {
 	/* check if external module is broken. */
 	assert(0 <= brk);
@@ -57,14 +58,30 @@ void linebreak_southeastasian_flagbreak(gcstring_t *gcstr)
 	assert(brk < k);
 
 	for (; i < gcstr->gclen && gcstr->gcstr[i].idx <= j + brk; i++) {
-	    /* check if external module break temp buffer. */
+	    /* check if external module broke temp buffer. */
 	    assert(buf[i] == gcstr->str[i]);
 
-	    if (gcstr->gcstr[i].lbc == LB_SA && !gcstr->gcstr[i].flag)
-		gcstr->gcstr[i].flag = 
-		    (gcstr->gcstr[i].idx == j + brk)?
-		    LINEBREAK_FLAG_BREAK_BEFORE:
-		    LINEBREAK_FLAG_PROHIBIT_BEFORE;
+	    if (gcstr->gcstr[i].lbc == LB_SA) {
+		if (!sa)
+		    /* skip the first grapheme of each SA block. */
+		    sa = 1;
+		else if (gcstr->gcstr[i].flag)
+		    /* already flagged by _preprocess(). */
+		    ;
+		else if (linebreak_lbclass(
+			    gcstr->lbobj,
+			    gcstr->str[gcstr->gcstr[i-1].idx +
+				       gcstr->gcstr[i-1].len - 1])
+			 != LB_SA)
+		    /* bogus breaking by non-SA grapheme extender. */
+		    ;
+		else
+		    gcstr->gcstr[i].flag = 
+			(gcstr->gcstr[i].idx == j + brk)?
+			LINEBREAK_FLAG_BREAK_BEFORE:
+			LINEBREAK_FLAG_PROHIBIT_BEFORE;
+	    } else
+		sa = 0;
 	}
     }
     for (; i < gcstr->gclen && gcstr->gcstr[i].lbc == LB_SA; i++)

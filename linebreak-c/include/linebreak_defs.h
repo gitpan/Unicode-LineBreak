@@ -1,7 +1,7 @@
 /*
  * linebreak_defs.h - common definitions for linebreak library
  * 
- * Copyright (C) 2009, 2010 by Hatuka*nezumi - IKEDA Soji.  All rights reserved.
+ * Copyright (C) 2009-2011 by Hatuka*nezumi - IKEDA Soji.
  *
  * This file is part of the Linebreak Package.  This program is free
  * software; you can redistribute it and/or modify it under the terms
@@ -179,6 +179,7 @@ typedef struct {
 #define LINEBREAK_OPTION_EASTASIAN_CONTEXT (1)
 #define LINEBREAK_OPTION_HANGUL_AS_AL (2)
 #define LINEBREAK_OPTION_LEGACY_CM (4)
+#define LINEBREAK_OPTION_BREAK_INDENT (8)
 
 #define LINEBREAK_REF_STASH (0)
 #define LINEBREAK_REF_FORMAT (1)

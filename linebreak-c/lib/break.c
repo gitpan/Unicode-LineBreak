@@ -1,7 +1,7 @@
 /*
  * Break.c - an implementation of Unicode line breaking algorithm.
  * 
- * Copyright (C) 2009 by Hatuka*nezumi - IKEDA Soji.  All rights reserved.
+ * Copyright (C) 2009-2011 by Hatuka*nezumi - IKEDA Soji.
  *
  * This file is part of the Linebreak Package.  This program is free
  * software; you can redistribute it and/or modify it under the terms
@@ -339,18 +339,29 @@ unistr_t *linebreak_break_partial(linebreak_t *lbobj, unistr_t *input)
 	    else if (str->gcstr[bBeg + bLen + bSpc].flag &
 		     LINEBREAK_FLAG_PROHIBIT_BEFORE)
 		action = PROHIBITED;
-	    else if (bLen == 0 && 0 < bSpc)
-		/* Prohibit break at sot or after breaking,
-		   alhtough rules don't tell it obviously. */
-		action = PROHIBITED;
+	    else if (lbobj->options & LINEBREAK_OPTION_BREAK_INDENT &&
+		     bLen == 0 && 0 < bSpc)
+		/* Allow break at sot or after breaking,
+		 * although rules don't tell it obviously. */
+		action = DIRECT;
 	    else {
 		propval_t blbc, albc;
+		size_t btail;
 
-		if ((blbc = str->gcstr[bBeg + bLen - bCM - 1].elbc) /* LB9 */
-		    == PROP_UNKNOWN)
-		    blbc = str->gcstr[bBeg + bLen - bCM - 1].lbc;
-		/* LB10: Treat any remaining CM+ as if it were AL. */
+		if (bLen == 0)
+		    btail = bBeg + bSpc - 1; /* before buffer is SP only. */
+		else
+		    btail = bBeg + bLen - bCM - 1; /* LB9 */
+
+		if ((blbc = str->gcstr[btail].elbc) == PROP_UNKNOWN)
+		    blbc = str->gcstr[btail].lbc;
 		switch (blbc) {
+		/* LB1: SA is resolved to AL
+		 * (AI, SG and XX are already resolved). */
+		case LB_SA:
+		    blbc = LB_AL;
+		    break;
+		/* LB10: Treat any remaining CM+ as if it were AL. */
 		case LB_CM:
 		    blbc = LB_AL;
 		    break;
@@ -363,12 +374,16 @@ unistr_t *linebreak_break_partial(linebreak_t *lbobj, unistr_t *input)
 		    blbc = (lbobj->options & LINEBREAK_OPTION_HANGUL_AS_AL)?
 			LB_AL: LB_ID;
 		    break;
-		/* XX and SG won't appear. */
 		}
 
 		albc = str->gcstr[bBeg + bLen + bSpc].lbc;
-		/* LB10: Treat any remaining CM+ as if it were AL. */
 		switch (albc) {
+		/* LB1: SA is resolved to AL
+		 * (AI, SG and XX are already resolved). */
+		case LB_SA:
+		    albc = LB_AL;
+		    break;
+		/* LB10: Treat any remaining CM+ as if it were AL. */
 		case LB_CM:
 		    albc = LB_AL;
 		    break;
@@ -381,7 +396,6 @@ unistr_t *linebreak_break_partial(linebreak_t *lbobj, unistr_t *input)
 		    albc = (lbobj->options & LINEBREAK_OPTION_HANGUL_AS_AL)?
 			LB_AL: LB_ID;
 		    break;
-		/* XX and SG won't appear. */
 		}
 
 		action = linebreak_lbrule(blbc, albc);
