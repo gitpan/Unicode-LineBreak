@@ -103,11 +103,12 @@ gcstring_t *_urgent_break(linebreak_t *lbobj, gcstring_t *str)
 	return NULL;						\
     }
 
-/** Perform line breaking algorithm on partial input.
+/** Perform line breaking algorithm with incremental inputs.
  *
  * @param[in] lbobj linebreak object.
  * @param[in] input Unicode string; give NULL to specify end of input.
- * @return array of (partial) broken grapheme cluster strings; NULL if internal error occurred.
+ * @return array of (partial) broken grapheme cluster strings
+ * If internal error occurred, lbobj->errnum is set then NULL is returned.
  */
 static
 gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
@@ -135,18 +136,18 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
     lbobj->unread.str = NULL;
     lbobj->unread.len = 0;
     if (input != NULL && input->len != 0) {
-        unichar_t *_u;
-        if ((_u =realloc(unistr.str,
+	unichar_t *_u;
+	if ((_u =realloc(unistr.str,
 			 sizeof(unichar_t) * (unistr.len + input->len)))
-            == NULL) {
+	    == NULL) {
 	    lbobj->errnum = errno;
 	    free(unistr.str);
-            return NULL;
-        } else
-            unistr.str = _u;
-        memcpy(unistr.str + unistr.len, input->str,
-               sizeof(unichar_t) * input->len);
-        unistr.len += input->len;
+	    return NULL;
+	} else
+	    unistr.str = _u;
+	memcpy(unistr.str + unistr.len, input->str,
+	       sizeof(unichar_t) * input->len);
+	unistr.len += input->len;
     }
 
     /***
@@ -414,8 +415,8 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 		    /* gcstring_t *broken; */
 		    size_t charmax, chars;
 
-		    IF_NULL_THEN_ABORT(s = gcstring_substr(str,
-			bBeg, str->pos - bBeg, NULL));
+		    IF_NULL_THEN_ABORT(s = gcstring_substr(str, bBeg,
+							   str->pos - bBeg));
 		    IF_NULL_THEN_ABORT(broken = _urgent_break(lbobj, s));
 		    gcstring_DESTROY(s);
 
@@ -439,7 +440,7 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 		    } /* while (!gcstring_eos(broken)) */
 
 		    urgEnd = broken->gclen;
-		    gcstring_substr(str, 0, str->pos, broken);
+		    gcstring_replace(str, 0, str->pos, broken);
 		    gcstring_DESTROY(broken);
 		    str->pos = 0;
 		    bBeg = bLen = bCM = bSpc = aCM = 0;
@@ -455,7 +456,7 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 	    } /* if (action == LINEBREAK_ACTION_PROHIBITED || ...) */
 	} /* if (0 < bSpc && ...) */
 
-        /***
+	/***
 	 *** Check end of input.
 	 ***/
 	if (!eot && str->gclen <= bBeg + bLen + bSpc) {
@@ -472,11 +473,11 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 	    bufSpc->len = 0;
 	    gcstring_DESTROY(bufSpc);
 
-            lbobj->bufcols = bufCols;
+	    lbobj->bufcols = bufCols;
 
-	    s = gcstring_substr(str, bBeg, str->gclen - bBeg, NULL);
-            lbobj->unread.str = s->str;
-            lbobj->unread.len = s->len;
+	    s = gcstring_substr(str, bBeg, str->gclen - bBeg);
+	    lbobj->unread.str = s->str;
+	    lbobj->unread.len = s->len;
 	    s->str = NULL;
 	    s->len = 0;
 	    gcstring_DESTROY(s);
@@ -489,7 +490,7 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 	    if (lenp != NULL)
 		*lenp = reslen;
 	    return results;
-        }
+	}
 
 	/* After all, possible actions are MANDATORY and arbitrary. */
 
@@ -497,21 +498,21 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 	 *** Examine line breaking action
 	 ***/
 
-	IF_NULL_THEN_ABORT(beforeFrg = gcstring_substr(str, bBeg, bLen, NULL));
+	IF_NULL_THEN_ABORT(beforeFrg = gcstring_substr(str, bBeg, bLen));
 
 	if (state == LINEBREAK_STATE_NONE) { /* sot undone. */
 	    /* Process start of text. */
 	    IF_NULL_THEN_ABORT(fmt = _format(lbobj, LINEBREAK_STATE_SOT,
 					     beforeFrg));
 	    if (gcstring_cmp(beforeFrg, fmt) != 0) {
-		s = gcstring_substr(str, bBeg + bLen, bSpc, NULL);
+		s = gcstring_substr(str, bBeg + bLen, bSpc);
 		gcstring_append(fmt, s);
 		gcstring_DESTROY(s);
 		s = gcstring_substr(str, bBeg + bLen + bSpc,
-				    str->pos - (bBeg + bLen + bSpc), NULL);
+				    str->pos - (bBeg + bLen + bSpc));
 		gcstring_append(fmt, s);
 		gcstring_DESTROY(s);
-		gcstring_substr(str, 0, str->pos, fmt);
+		gcstring_replace(str, 0, str->pos, fmt);
 		str->pos = 0;
 		bBeg = bLen = bCM = bSpc = aCM = 0;
 		urgEnd = 0;
@@ -531,14 +532,14 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 	    IF_NULL_THEN_ABORT(fmt = _format(lbobj, LINEBREAK_STATE_SOP,
 					     beforeFrg));
 	    if (gcstring_cmp(beforeFrg, fmt) != 0) {
-		s = gcstring_substr(str, bBeg + bLen, bSpc, NULL);
+		s = gcstring_substr(str, bBeg + bLen, bSpc);
 		gcstring_append(fmt, s);
 		gcstring_DESTROY(s);
 		s = gcstring_substr(str, bBeg + bLen + bSpc,
-				    str->pos - (bBeg + bLen + bSpc), NULL);
+				    str->pos - (bBeg + bLen + bSpc));
 		gcstring_append(fmt, s);
 		gcstring_DESTROY(s);
-		gcstring_substr(str, 0, str->pos, fmt);
+		gcstring_replace(str, 0, str->pos, fmt);
 		str->pos = 0;
 		bBeg = bLen = bCM = bSpc = aCM = 0;
 		urgEnd = 0;
@@ -577,8 +578,8 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 		broken = NULL;
 
 		if (0.0 < bufCols && bufCols < lbobj->colmin) {
-		    gcstring_substr(beforeFrg, 0, 0, bufSpc);
-		    gcstring_substr(beforeFrg, 0, 0, bufStr);
+		    gcstring_replace(beforeFrg, 0, 0, bufSpc);
+		    gcstring_replace(beforeFrg, 0, 0, bufStr);
 		    gcstring_shrink(bufSpc, 0);
 		    gcstring_shrink(bufStr, 0);
 		    bufCols = 0.0;
@@ -590,10 +591,10 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 		}
 
 		if (broken != NULL) {
-		    s = gcstring_substr(str, bBeg + bLen, bSpc, NULL);
+		    s = gcstring_substr(str, bBeg + bLen, bSpc);
 		    gcstring_append(broken, s);
 		    gcstring_DESTROY(s);
-		    gcstring_substr(str, 0, bBeg + bLen + bSpc, broken);
+		    gcstring_replace(str, 0, bBeg + bLen + bSpc, broken);
 		    str->pos = 0;
 		    urgEnd = broken->gclen;
 		    bBeg = bLen = bCM = bSpc = aCM = 0;
@@ -639,7 +640,7 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 	    gcstring_append(bufStr, beforeFrg);
 
 	    gcstring_shrink(bufSpc, 0);
-	    s = gcstring_substr(str, bBeg + bLen, bSpc, NULL);
+	    s = gcstring_substr(str, bBeg + bLen, bSpc);
 	    gcstring_append(bufSpc, s);
 	    gcstring_DESTROY(s);
 
@@ -652,7 +653,7 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 	    gcstring_append(bufStr, beforeFrg);
 
 	    gcstring_shrink(bufSpc, 0);
-	    s = gcstring_substr(str, bBeg + bLen, bSpc, NULL);
+	    s = gcstring_substr(str, bBeg + bLen, bSpc);
 	    gcstring_append(bufSpc, s);
 	    gcstring_DESTROY(s);
 
@@ -661,14 +662,14 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 
 	gcstring_DESTROY(beforeFrg);
 
-        /***
+	/***
 	 *** Mandatory break or end-of-text.
 	 ***/
-        if (eot && str->gclen <= bBeg + bLen + bSpc)
+	if (eot && str->gclen <= bBeg + bLen + bSpc)
 	    break; /* while (1) */
 
-        if (action == LINEBREAK_ACTION_MANDATORY) {
-            /* Process mandatory break. */
+	if (action == LINEBREAK_ACTION_MANDATORY) {
+	    /* Process mandatory break. */
 	    gcstring_t **r;
 
 	    IF_NULL_THEN_ABORT(r = realloc(results,
@@ -690,16 +691,16 @@ gcstring_t **_break_partial(linebreak_t *lbobj, unistr_t *input, size_t *lenp)
 	    gcstring_shrink(bufStr, 0);
 	    gcstring_shrink(bufSpc, 0);
 	    bufCols = 0.0;
-        }
+	}
 
-        /***
+	/***
 	 *** Shift buffers.
 	 ***/
-        bBeg += bLen + bSpc;
-        bLen = str->pos - bBeg;
-        bSpc = 0;
-        bCM = aCM;
-        aCM = 0;
+	bBeg += bLen + bSpc;
+	bLen = str->pos - bBeg;
+	bSpc = 0;
+	bCM = aCM;
+	aCM = 0;
     } /* while (1) */
 
     /***
@@ -744,12 +745,13 @@ gcstring_t **linebreak_break_partial(linebreak_t *lbobj, unistr_t *input)
  *
  * @param[in] lbobj linebreak object.
  * @param[in] input Unicode string.
- * @return array of broken graphem cluster string; NULL if internal error occurred.
+ * @return array of broken grapheme cluster string
+ * If internal error occurred, lbobj->errnum is set then NULL is returned.
  */
 gcstring_t **linebreak_break_fast(linebreak_t *lbobj, unistr_t *input)
 {
-    gcstring_t **ret, **t, **r;
-    size_t i, j, retlen;
+    gcstring_t **ret, **appe, **r;
+    size_t i, j, retlen, appelen;
 
     if (input == NULL || input->len == 0) {
 	if ((ret = malloc(sizeof(gcstring_t *))) != NULL)
@@ -760,28 +762,29 @@ gcstring_t **linebreak_break_fast(linebreak_t *lbobj, unistr_t *input)
     if ((ret = _break_partial(lbobj, input, &retlen)) == NULL)
 	return NULL;
 
-    if ((t = _break_partial(lbobj, NULL, &j)) == NULL) {
+    if ((appe = _break_partial(lbobj, NULL, &appelen)) == NULL) {
 	for (i = 0; i < retlen; i++)
 	    gcstring_destroy(ret[i]);
 	free(ret);
 	return NULL;
     }
-    if (j) {
+    if (appelen) {
 	if ((r = realloc(ret,
-			 sizeof(gcstring_t *) * (retlen + j + 1))) == NULL) {
+			 sizeof(gcstring_t *) *
+			 (retlen + appelen + 1))) == NULL) {
 	    lbobj->errnum = errno? errno: ENOMEM;
 	    for (i = 0; i < retlen; i++)
 		gcstring_destroy(ret[i]);
 	    free(ret);
-	    for (j = 0; t[j] != NULL; j++)
-		gcstring_destroy(t[j]);
-	    free(t);
+	    for (j = 0; j < appelen; j++)
+		gcstring_destroy(appe[j]);
+	    free(appe);
 	    return NULL;
 	} else
 	    ret = r;
-	memcpy(ret + retlen, t, sizeof(gcstring_t *) * (j + 1));
+	memcpy(ret + retlen, appe, sizeof(gcstring_t *) * (appelen + 1));
     }
-    free(t);
+    free(appe);
 
     return ret;
 }
@@ -794,13 +797,14 @@ gcstring_t **linebreak_break_fast(linebreak_t *lbobj, unistr_t *input)
  *
  * @param[in] lbobj linebreak object.
  * @param[in] input Unicode string.
- * @return array of broken grapheme cluster strings; NULL if internal error occurred.
+ * @return array of broken grapheme cluster strings
+ * If internal error occurred, lbobj->errnum is set then NULL is returned.
  */
 gcstring_t **linebreak_break(linebreak_t *lbobj, unistr_t *input)
 {
     unistr_t unistr = {NULL, 0};
-    gcstring_t **ret, **t, **r;
-    size_t i, j, k, retlen;
+    gcstring_t **ret, **appe, **r;
+    size_t i, j, k, retlen, appelen;
 
     if ((ret = malloc(sizeof(gcstring_t *))) != NULL)
 	ret[0] = NULL;
@@ -811,79 +815,82 @@ gcstring_t **linebreak_break(linebreak_t *lbobj, unistr_t *input)
     unistr.len = PARTIAL_LENGTH;
     for (k = 0; PARTIAL_LENGTH < input->len - k; k += PARTIAL_LENGTH) {
 	unistr.str = input->str + k;
-	if ((t = _break_partial(lbobj, &unistr, &j)) == NULL) {
+	if ((appe = _break_partial(lbobj, &unistr, &appelen)) == NULL) {
 	    for (i = 0; i < retlen; i++)
 		gcstring_destroy(ret[i]);
 	    free(ret);
 	    return NULL;
 	}
-	if (j) {
+	if (appelen) {
 	    if ((r = realloc(ret,
 			     sizeof(gcstring_t *) *
-			     (retlen + j + 1))) == NULL) {
+			     (retlen + appelen + 1))) == NULL) {
 		lbobj->errnum = errno? errno: ENOMEM;
 		for (i = 0; i < retlen; i++)
 		    gcstring_destroy(ret[i]);
 		free(ret);
-		for (j = 0; t[j] != NULL; j++)
-		    gcstring_destroy(t[j]);
-		free(t);
+		for (j = 0; j < appelen; j++)
+		    gcstring_destroy(appe[j]);
+		free(appe);
 		return NULL;
 	    } else
 		ret = r;
-	    memcpy(ret + retlen, t, sizeof(gcstring_t *) * (j + 1));
-	    retlen += j;
+	    memcpy(ret + retlen, appe, sizeof(gcstring_t *) * (appelen + 1));
+	    retlen += appelen;
 	}
-	free(t);
+	free(appe);
     }
     unistr.len = input->len - k;
     unistr.str = input->str + k;
-    if ((t = _break_partial(lbobj, &unistr, &j)) == NULL) {
+    if ((appe = _break_partial(lbobj, &unistr, &appelen)) == NULL) {
 	for (i = 0; i < retlen; i++)
 	    gcstring_destroy(ret[i]);
 	free(ret);
 	return NULL;
     }
-    if (j) {
+    if (appelen) {
 	if ((r = realloc(ret,
-			 sizeof(gcstring_t *) * (retlen + j + 1))) == NULL) {
+			 sizeof(gcstring_t *) *
+			 (retlen + appelen + 1))) == NULL) {
 	    lbobj->errnum = errno? errno: ENOMEM;
 	    for (i = 0; i < retlen; i++)
 		gcstring_destroy(ret[i]);
 	    free(ret);
-	    for (j = 0; t[j] != NULL; j++)
-		gcstring_destroy(t[j]);
-	    free(t);
+	    for (j = 0; j < appelen; j++)
+		gcstring_destroy(appe[j]);
+	    free(appe);
 	    return NULL;
 	} else
 	    ret = r;
-	memcpy(ret + retlen, t, sizeof(gcstring_t *) * (j + 1));
-	retlen += j;
+	memcpy(ret + retlen, appe, sizeof(gcstring_t *) * (appelen + 1));
+	retlen += appelen;
     }
-    free(t);
+    free(appe);
 
-    if ((t = _break_partial(lbobj, NULL, &j)) == NULL) {
+    if ((appe = _break_partial(lbobj, NULL, &appelen)) == NULL) {
 	for (i = 0; i < retlen; i++)
 	    gcstring_destroy(ret[i]);
 	free(ret);
 	return NULL;
     }    
-    if (j) {
+    if (appelen) {
 	if ((r = realloc(ret,
-			 sizeof(gcstring_t *) * (retlen + j + 1))) == NULL) {
+			 sizeof(gcstring_t *) *
+			 (retlen + appelen + 1))) == NULL) {
 	    lbobj->errnum = errno? errno: ENOMEM;
 	    for (i = 0; i < retlen; i++)
 		gcstring_destroy(ret[i]);
 	    free(ret);
-	    for (j = 0; t[j] != NULL; j++)
-		gcstring_destroy(t[j]);
-	    free(t);
+	    for (j = 0; j < appelen; j++)
+		gcstring_destroy(appe[j]);
+	    free(appe);
 	    return NULL;
 	} else
 	    ret = r;
-	memcpy(ret + retlen, t, sizeof(gcstring_t *) * (j + 1));
+	memcpy(ret + retlen, appe, sizeof(gcstring_t *) * (appelen + 1));
     }
-    free(t);
+    free(appe);
 
     return ret;
 }
+

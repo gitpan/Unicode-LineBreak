@@ -21,8 +21,8 @@
 extern propval_t *linebreak_rules[];
 extern size_t linebreak_rulessiz;
 extern void linebreak_charprop(linebreak_t *, unichar_t,
-                               propval_t *, propval_t *, propval_t *,
-                               propval_t *);
+		       propval_t *, propval_t *, propval_t *,
+		       propval_t *);
 
 static
 const linebreak_t initlbobj = {
@@ -58,6 +58,7 @@ const linebreak_t initlbobj = {
  * Reference count of it will be set to 1.
  * @param[in] ref_func function to handle reference count of external objects. 
  * @return New linebreak object.
+ * If error occurred, errno is set then NULL is returned.
  */
 linebreak_t *linebreak_new(void (*ref_func)())
 {
@@ -96,6 +97,7 @@ linebreak_t *linebreak_incref(linebreak_t *obj)
  * stash members.
  * @param[in] obj linebreak object.
  * @return New linebreak object.
+ * If error occurred, errno is set then NULL is returned.
  */
 linebreak_t *linebreak_copy(linebreak_t *obj)
 {
@@ -107,17 +109,17 @@ linebreak_t *linebreak_copy(linebreak_t *obj)
 	return NULL;
     memcpy(newobj, obj, sizeof(linebreak_t));
 
-    if (obj->map && obj->mapsiz) {
+    if (obj->map != NULL && obj->mapsiz) {
 	if ((newmap = malloc(sizeof(mapent_t) * obj->mapsiz))== NULL) {
 	    free(newobj);
 	    return NULL;
 	}
 	memcpy(newmap, obj->map, sizeof(mapent_t) * obj->mapsiz);
 	newobj->map = newmap;
-    }
-    else
+    } else
 	newobj->map = NULL;
-    if (obj->newline.str && obj->newline.len) {
+
+    if (obj->newline.str != NULL && obj->newline.len) {
 	if ((newstr = malloc(sizeof(unichar_t) * obj->newline.len)) == NULL) {
 	    free(newobj->map);
 	    free(newobj);
@@ -125,10 +127,10 @@ linebreak_t *linebreak_copy(linebreak_t *obj)
 	}
 	memcpy(newstr, obj->newline.str, sizeof(unichar_t) * obj->newline.len);
 	newobj->newline.str = newstr;
-    }
-    else
+    } else
 	newobj->newline.str = NULL;
-    if (obj->bufstr.str && obj->bufstr.len) {
+
+    if (obj->bufstr.str != NULL && obj->bufstr.len) {
 	if ((newstr = malloc(sizeof(unichar_t) * obj->bufstr.len)) == NULL) {
 	    free(newobj->map);
 	    free(newobj->newline.str);
@@ -137,10 +139,10 @@ linebreak_t *linebreak_copy(linebreak_t *obj)
 	}
 	memcpy(newstr, obj->bufstr.str, sizeof(unichar_t) * obj->bufstr.len);
 	newobj->bufstr.str = newstr;
-    }
-    else
+    } else
 	newobj->bufstr.str = NULL;
-    if (obj->bufspc.str && obj->bufspc.len) {
+
+    if (obj->bufspc.str != NULL && obj->bufspc.len) {
 	if ((newstr = malloc(sizeof(unichar_t) * obj->bufspc.len)) == NULL) {
 	    free(newobj->map);
 	    free(newobj->newline.str);
@@ -150,10 +152,10 @@ linebreak_t *linebreak_copy(linebreak_t *obj)
 	}
 	memcpy(newstr, obj->bufspc.str, sizeof(unichar_t) * obj->bufspc.len);
 	newobj->bufspc.str = newstr;
-    }
-    else
+    } else
 	newobj->bufspc.str = NULL;
-    if (obj->unread.str && obj->unread.len) {
+
+    if (obj->unread.str != NULL && obj->unread.len) {
 	if ((newstr = malloc(sizeof(unichar_t) * obj->unread.len)) == NULL) {
 	    free(newobj->map);
 	    free(newobj->newline.str);
@@ -164,8 +166,7 @@ linebreak_t *linebreak_copy(linebreak_t *obj)
 	}
 	memcpy(newstr, obj->unread.str, sizeof(unichar_t) * obj->unread.len);
 	newobj->unread.str = newstr;
-    }
-    else
+    } else
 	newobj->unread.str = NULL;
 
     if (newobj->ref_func != NULL) {
@@ -180,6 +181,7 @@ linebreak_t *linebreak_copy(linebreak_t *obj)
 	if (newobj->user_data != NULL)
 	    (*newobj->ref_func)(newobj->user_data, LINEBREAK_REF_USER, +1);
     }
+
     newobj->refcount = 1UL;
     return newobj;
 }
@@ -203,6 +205,7 @@ void linebreak_destroy(linebreak_t *obj)
     free(obj->map);
     free(obj->newline.str);
     free(obj->bufstr.str);
+    free(obj->bufspc.str);
     free(obj->unread.str);
     if (obj->ref_func != NULL) {
 	if (obj->stash != NULL)
@@ -217,6 +220,34 @@ void linebreak_destroy(linebreak_t *obj)
 	    (*obj->ref_func)(obj->user_data, LINEBREAK_REF_USER, -1);
     }
     free(obj);
+}
+
+/** Setter: Update newline member
+ *
+ * @param[in] lbobj target linebreak object.
+ * @param[in] newline pointer to Unicode string.
+ * Copy of newline is set.
+ * If error occurred, lbobj->errnum is set.
+ */
+void linebreak_set_newline(linebreak_t *lbobj, unistr_t *newline)
+{
+    unichar_t *str;
+    size_t len;
+
+    if (newline != NULL && newline->str != NULL && newline->len != 0) {
+	if ((str = malloc(sizeof(unichar_t) * newline->len)) == NULL) {
+	    lbobj->errnum = errno? errno: ENOMEM;
+	    return;
+	}
+	memcpy(str, newline->str, sizeof(unichar_t) * newline->len);
+	len = newline->len;
+    } else {
+	str = NULL;
+	len = 0;
+    }
+    free(lbobj->newline.str);
+    lbobj->newline.str = str;
+    lbobj->newline.len = len;
 }
 
 /** Setter: Update stash Member
@@ -314,6 +345,7 @@ void linebreak_set_user(linebreak_t *lbobj, gcstring_t *(*user_func)(),
  * Internal state is set by linebreak_break_partial() function.
  * @param[in] lbobj linebreak object.
  * @return none.
+ * If lbobj was NULL, do nothing.
  */
 void linebreak_reset(linebreak_t *lbobj)
 {

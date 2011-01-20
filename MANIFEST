@@ -5,6 +5,7 @@ GPL
 lib/Text/LineFold.pm
 lib/Text/LineFold/JA_JP.pod
 lib/Unicode/GCString.pm
+lib/Unicode/GCString.pod
 lib/Unicode/GCString/JA_JP.pod
 lib/Unicode/LineBreak.pm
 lib/Unicode/LineBreak.pod
@@ -59,6 +60,8 @@ sombok/Makefile.in
 sombok/missing
 sombok/NEWS
 sombok/README
+sombok/src/mymalloc.c
+sombok/src/mymalloc.h
 sombok/src/strcasecmp.c
 sombok/src/strerror.c
 Makefile.PL

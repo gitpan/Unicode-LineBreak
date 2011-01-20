@@ -158,7 +158,8 @@ void _gcinfo(linebreak_t *obj, unistr_t *str, size_t pos,
  * Use gcstring_newcopy() if you wish to copy buffer of Unicode string.
  * @param[in] unistr Unicode string.  NULL may be given as zero-length string.
  * @param[in] lbobj linebreak object.
- * @return New grapheme cluster string.
+ * @return New grapheme cluster string sharing str buffer with unistr.
+ * If error occurred, errno is set then NULL is returned.
  */
 gcstring_t *gcstring_new(unistr_t *unistr, linebreak_t *lbobj)
 {
@@ -225,6 +226,7 @@ gcstring_t *gcstring_new(unistr_t *unistr, linebreak_t *lbobj)
  * @param[in] str Unicode string.  NULL may be given as zero-length string.
  * @param[in] lbobj linebreak object.
  * @return New grapheme cluster string.
+ * If error occurred, errno is set then NULL is returned.
  */
 gcstring_t *gcstring_newcopy(unistr_t *str, linebreak_t *lbobj)
 {
@@ -244,6 +246,7 @@ gcstring_t *gcstring_newcopy(unistr_t *str, linebreak_t *lbobj)
  * Free memories allocated for grapheme cluster string.
  * @param[in] gcstr grapheme cluster string.
  * @return none.
+ * If gcstr is NULL, do nothing.
  */
 void gcstring_destroy(gcstring_t *gcstr)
 {
@@ -258,8 +261,9 @@ void gcstring_destroy(gcstring_t *gcstr)
 /** Copy Constructor
  *
  * Create deep copy of grapheme cluster string.
- * @param[in] gcstr grapheme cluster string.
- * @return Copy of grapheme cluster string.
+ * @param[in] gcstr grapheme cluster string, must not be NULL.
+ * @return deep copy of grapheme cluster string.
+ * If error occurred, errno is set then NULL is returned.
  */
 gcstring_t *gcstring_copy(gcstring_t *gcstr)
 {
@@ -306,9 +310,11 @@ gcstring_t *gcstring_copy(gcstring_t *gcstr)
 /** Append
  *
  * Modify grapheme cluster string by appending another string.
- * @param[in] gcstr target grapheme cluster string.
+ * @param[in] gcstr target grapheme cluster string, must not be NULL.
  * @param[in] appe grapheme cluster string to be appended.
- * @return Modified grapheme cluster string gcstr.
+ * NULL means null string therefore gcstr won't be modified.
+ * @return Modified grapheme cluster string gcstr itself (not a copy).
+ * If error occurred, errno is set then NULL is returned.
  */
 gcstring_t *gcstring_append(gcstring_t *gcstr, gcstring_t *appe)
 {
@@ -419,8 +425,8 @@ int gcstring_cmp(gcstring_t *a, gcstring_t *b)
 
 /** Number of Columns
  *
- * Returns number of columns of grapheme cluster strings determined by built-in character database according to UAX #14.
- * @param[in] gcstr grapheme cluster string.
+ * Returns number of columns of grapheme cluster strings determined by built-in character database according to UAX #11.
+ * @param[in] gcstr grapheme cluster string. NULL may mean null string.
  * @return Number of columns.
  */
 size_t gcstring_columns(gcstring_t *gcstr)
@@ -434,12 +440,14 @@ size_t gcstring_columns(gcstring_t *gcstr)
     return col;
 }
 
-/** Concatinate
+/** Concatenate
  *
- * Create new grapheme cluster string that is concatination of two strings.
- * @param[in] gcstr grapheme cluster string.
- * @param[in] appe grapheme cluster string to be appended.
+ * Create new grapheme cluster string which is concatination of two strings.
+ * @param[in] gcstr grapheme cluster string, must not be NULL.
+ * @param[in] appe grapheme cluster string to be appended.  NULL means null
+ * string.
  * @return New grapheme cluster string.
+ * If error occurred, errno is set then NULL is returned.
  */
 gcstring_t *gcstring_concat(gcstring_t *gcstr, gcstring_t *appe)
 {
@@ -461,6 +469,7 @@ gcstring_t *gcstring_concat(gcstring_t *gcstr, gcstring_t *appe)
  * Next position will be incremented.
  * @param[in] gcstr grapheme cluster string.
  * @return Pointer to grapheme cluster.
+ * If pointer was already at end of the string, NULL will be returned.
  */
 gcchar_t *gcstring_next(gcstring_t *gcstr)
 {
@@ -475,6 +484,7 @@ gcchar_t *gcstring_next(gcstring_t *gcstr)
  * @param[in] gcstr grapheme cluster string.
  * @param[in] pos New position.
  * @return none.
+ * If pos is out of range of string, position won't be updated.
  */
 void gcstring_setpos(gcstring_t *gcstr, int pos)
 {
@@ -492,9 +502,13 @@ void gcstring_setpos(gcstring_t *gcstr, int pos)
  * @param[in] gcstr grapheme cluster string.
  * @param[in] length New length.
  * @return none.
+ * If gcstr was NULL, do nothing.
  */
 void gcstring_shrink(gcstring_t *gcstr, int length)
 {
+    if (gcstr == NULL)
+	return;
+
     if (length < 0)
 	length += gcstr->gclen;
 
@@ -517,15 +531,13 @@ void gcstring_shrink(gcstring_t *gcstr, int length)
  *
  * Returns substring of grapheme cluster string.
  * Offset and length are specified by number of grapheme clusters.
- * @param[in] gcstr grapheme cluster string.
+ * @param[in] gcstr grapheme cluster string.  Must not be NULL.
  * @param[in] offset Offset of substring.
  * @param[in] length Length of substring.
- * @param[in] replacement If this was not NULL, modify grapheme cluster string
- * by replaceing substring with it.
- * @return Substring.
+ * @return (newly allocated) substring.
+ * If error occurred, errno is set to non-zero then NULL is returned.
  */
-gcstring_t *gcstring_substr(gcstring_t *gcstr, int offset, int length,
-			    gcstring_t *replacement)
+gcstring_t *gcstring_substr(gcstring_t *gcstr, int offset, int length)
 {
     gcstring_t *new, *tail;
     size_t ulength, i;
@@ -533,6 +545,7 @@ gcstring_t *gcstring_substr(gcstring_t *gcstr, int offset, int length,
     if (gcstr == NULL)
 	return (errno = EINVAL), NULL;
 
+    /* adjust offset. */
     if (offset < 0)
 	offset += gcstr->gclen;
     if (offset < 0) {
@@ -542,36 +555,40 @@ gcstring_t *gcstring_substr(gcstring_t *gcstr, int offset, int length,
     if (length < 0)
 	length += gcstr->gclen - offset;
 
-    if (length < 0 || gcstr->gclen < offset) {
-	if (replacement)
-	    return (errno = EINVAL), NULL;
-	else
-	    return gcstring_new(NULL, gcstr->lbobj);
-    }
+    if (length < 0 || gcstr->gclen < offset) /* out of range */
+	return gcstring_new(NULL, gcstr->lbobj);
 
-    if (gcstr->gclen == offset) {
+    if (gcstr->gclen == offset)
 	length = 0;
-	ulength = 0;
-    } else if (gcstr->gclen <= offset + length) {
+    else if (gcstr->gclen <= offset + length)
 	length = gcstr->gclen - offset;
-	ulength = gcstr->len - gcstr->gcstr[offset].idx;
-    } else
-	ulength = gcstr->gcstr[offset + length].idx -
-	    gcstr->gcstr[offset].idx;
+
+    /* create substring. */
+
+    if (gcstr->gclen == offset)
+	ulength = 0;
+    else if (gcstr->gclen <= offset + length)
+	ulength = gcstr->len - gcstr->gcstr[offset].idx;	
+    else
+	ulength = gcstr->gcstr[offset + length].idx - gcstr->gcstr[offset].idx;
 
     if ((new = gcstring_new(NULL, gcstr->lbobj)) == NULL)
 	return NULL; 
 
-    if ((new->str = malloc(sizeof(unichar_t) * ulength)) == NULL) {
+    if (ulength == 0)
+	;
+    else if ((new->str = malloc(sizeof(unichar_t) * ulength)) == NULL) {
 	gcstring_destroy(new);
 	return NULL;
     }
-    if ((new->gcstr = malloc(sizeof(gcchar_t) * length)) == NULL) {
+    if (length == 0)
+	;
+    else if ((new->gcstr = malloc(sizeof(gcchar_t) * length)) == NULL) {
 	free(new->str);
 	gcstring_destroy(new);
 	return NULL;
     }
-    if (ulength)
+    if (ulength != 0)
 	memcpy(new->str, gcstr->str + gcstr->gcstr[offset].idx,
 	       sizeof(unichar_t) * ulength);
     new->len = ulength;
@@ -580,23 +597,66 @@ gcstring_t *gcstring_substr(gcstring_t *gcstr, int offset, int length,
 	new->gcstr[i].idx -= gcstr->gcstr[offset].idx;
     }
     new->gclen = length;
-
-    if (replacement) {
-	if ((tail = gcstring_substr(gcstr, offset + length,
-				    gcstr->gclen - (offset + length), NULL))
-	    == NULL) {
-	    gcstring_destroy(new);
-	    return NULL;
-	}
-	gcstring_shrink(gcstr, offset);
-	if (gcstring_append(gcstr, replacement) == NULL ||
-	    gcstring_append(gcstr, tail) == NULL) {
-	    gcstring_destroy(new);
-	    gcstring_destroy(tail);
-	    return NULL;
-	}
-	gcstring_destroy(tail);
-    }
-
+ 
     return new;
 }
+
+/** Replace substring
+ *
+ * Replace substring og grapheme cluster string.
+ * Offset and length are specified by number of grapheme clusters.
+ * @param[in] gcstr grapheme cluster string.  Must not be NULL.
+ * @param[in] offset Offset of substring.
+ * @param[in] length Length of substring.
+ * @param[in] replacement If this was not NULL, modify grapheme cluster string by replacing substring with it.
+ * @return modified gcstr itself (not a copy of it).
+ * If error occurred, errno is set to non-zero then NULL is returned.
+ */
+gcstring_t *gcstring_replace(gcstring_t *gcstr, int offset, int length,
+			     gcstring_t *replacement)
+{
+    gcstring_t *tail;
+
+    if (gcstr == NULL)
+	return (errno = EINVAL), NULL;
+
+    /* without replacement: meaningless. return immedately. */
+    if (replacement == NULL)
+	return gcstr;
+
+    /* adjust offset. */
+    if (offset < 0)
+	offset += gcstr->gclen;
+    if (offset < 0) {
+	length += offset;
+	offset = 0;
+    }
+    if (length < 0)
+	length += gcstr->gclen - offset;
+
+    if (length < 0 || gcstr->gclen < offset) /* out of range */
+	return (errno = EINVAL), NULL;
+
+    if (gcstr->gclen == offset)
+	length = 0;
+    else if (gcstr->gclen <= offset + length)
+	length = gcstr->gclen - offset;
+
+    /* returns modified gcstr itself. */
+
+    if ((tail = gcstring_substr(gcstr, offset + length,
+				gcstr->gclen - (offset + length))) == NULL)
+	return NULL;
+    gcstring_shrink(gcstr, offset);
+    if (gcstring_append(gcstr, replacement) == NULL) {
+	gcstring_destroy(tail);
+	return NULL;
+    }
+    if (gcstring_append(gcstr, tail) == NULL) {
+	gcstring_destroy(tail);
+	return NULL;
+    }
+    gcstring_destroy(tail);
+    return gcstr;
+}
+

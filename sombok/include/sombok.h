@@ -211,6 +211,7 @@ typedef enum {
 
 /** linebreak_t: errnum value for exsessive line. */
 #define LINEBREAK_ELONG (-2)
+#define LINEBREAK_EEXTN (-3)
 
 
 /***
@@ -228,7 +229,8 @@ extern gcstring_t *gcstring_concat(gcstring_t *, gcstring_t *);
 extern gcchar_t *gcstring_next(gcstring_t *);
 extern void gcstring_setpos(gcstring_t *, int);
 extern void gcstring_shrink(gcstring_t *, int);
-extern gcstring_t *gcstring_substr(gcstring_t *, int, int, gcstring_t *);
+extern gcstring_t *gcstring_substr(gcstring_t *, int, int);
+extern gcstring_t *gcstring_replace(gcstring_t *, int, int, gcstring_t *);
 
 #define gcstring_eos(gcstr) \
   ((gcstr)->gclen <= (gcstr)->pos)
@@ -240,6 +242,7 @@ extern linebreak_t *linebreak_copy(linebreak_t *);
 extern linebreak_t *linebreak_incref(linebreak_t *);
 extern void linebreak_destroy(linebreak_t *);
 
+extern void linebreak_set_newline(linebreak_t *, unistr_t *);
 extern void linebreak_set_stash(linebreak_t *, void *);
 extern void linebreak_set_format(linebreak_t *, gcstring_t *(*)(), void *);
 extern void linebreak_set_sizing(linebreak_t *, double (*)(), void *);
@@ -275,4 +278,6 @@ extern gcstring_t *linebreak_urgent_FORCE(linebreak_t *, gcstring_t *);
 
 #define _SOMBOK_H_
 #endif /* _SOMBOK_H_ */
+
+// #include "src/mymalloc.h"
 

@@ -26,7 +26,7 @@ int strcasecmp(const char *s1, const char *s2)
     if (s1 == NULL || s2 == NULL)
 	return ((s1 != NULL)? 1: 0) - ((s2 != NULL)? 1: 0);
     for (i = 0; (c1 = TOUPPER(s1[i])) && (c2 = TOUPPER(s2[i])); i++)
-        if (c1 != c2)
-            return c1 - c2;
+	if (c1 != c2)
+	    return c1 - c2;
     return c1 - c2;    
 }

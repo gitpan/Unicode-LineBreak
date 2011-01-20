@@ -15,7 +15,6 @@
  * $id$
  */
 
-#include <stdio.h>
 #include "sombok_constants.h"
 #include "sombok.h"
 
@@ -26,10 +25,9 @@
  * @param[in] spc Trailing spaces of preceding string.
  * @param[in] str Appended grapheme cluster string.
  * @param[in] max Maximum size.
- * @return If max is zero, returns number of columns of pre+spc+str.
- * If max is positive, returns maximum number of characters of substr,
- * where substr is substring of str by that number of columns of
- * pre+spc+substr will not exceed max.
+ * @return number of columns of pre+spc+str.
+ *
+ * One built-in Sizing callback is based on UAX #11.
  */
 
 double linebreak_sizing_UAX11(linebreak_t *obj, double len, gcstring_t *pre,
@@ -57,7 +55,7 @@ double linebreak_sizing_UAX11(linebreak_t *obj, double len, gcstring_t *pre,
  *
  * Built-in format brehaviors specified by ``format'' member of linebreak_t. 
  *
- * Following table describes behavior of built-in format functions
+ * Following table describes behavior of built-in format callbacks
  * by each option.
  *
  * state| SIMPLE          | NEWLINE           | TRIM
@@ -81,19 +79,24 @@ gcstring_t *linebreak_format_SIMPLE(linebreak_t *lbobj,
 
     switch (state) {
     case LINEBREAK_STATE_EOL:
-        if ((result = gcstring_copy(gcstr)) == NULL)
+	if ((result = gcstring_copy(gcstr)) == NULL)
 	    return NULL;
-        unistr.str = lbobj->newline.str;
-        unistr.len = lbobj->newline.len;
-        if ((t = gcstring_newcopy(&unistr, lbobj)) == NULL)
+	unistr.str = lbobj->newline.str;
+	unistr.len = lbobj->newline.len;
+	if ((t = gcstring_new(&unistr, lbobj)) == NULL)
 	    return NULL;
-        if (gcstring_append(result, t) == NULL)
+	if (gcstring_append(result, t) == NULL) {
+	    t->str = NULL;
+	    gcstring_destroy(t);
 	    return NULL;
-        gcstring_destroy(t);
-        return result;
+	}
+	t->str = NULL;
+	gcstring_destroy(t);
+	return result;
+
     default:
 	errno = 0;
-        return NULL;
+	return NULL;
     }
 }
 
@@ -108,14 +111,15 @@ gcstring_t *linebreak_format_NEWLINE(linebreak_t *lbobj,
     case LINEBREAK_STATE_EOL:
     case LINEBREAK_STATE_EOP:
     case LINEBREAK_STATE_EOT:
-        unistr.str = lbobj->newline.str;
-        unistr.len = lbobj->newline.len;
-        if ((result = gcstring_newcopy(&unistr, lbobj)) == NULL)
+	unistr.str = lbobj->newline.str;
+	unistr.len = lbobj->newline.len;
+	if ((result = gcstring_newcopy(&unistr, lbobj)) == NULL)
 	    return NULL;
-        return result;
+	return result;
+
     default:
 	errno = 0;
-        return NULL;
+	return NULL;
     }
 }
 
@@ -129,25 +133,27 @@ gcstring_t *linebreak_format_TRIM(linebreak_t *lbobj,
 
     switch (state) {
     case LINEBREAK_STATE_EOL:
-        unistr.str = lbobj->newline.str;
-        unistr.len = lbobj->newline.len;
-        if ((result = gcstring_newcopy(&unistr, lbobj)) == NULL)
-            return NULL;
-        return result;
+	unistr.str = lbobj->newline.str;
+	unistr.len = lbobj->newline.len;
+	if ((result = gcstring_newcopy(&unistr, lbobj)) == NULL)
+	    return NULL;
+	return result;
+
     case LINEBREAK_STATE_EOP:
     case LINEBREAK_STATE_EOT:
-        if (gcstr->str == NULL || gcstr->len == 0) {
-            if ((result = gcstring_newcopy(&unistr, lbobj)) == NULL)
+	if (gcstr->str == NULL || gcstr->len == 0) {
+	    if ((result = gcstring_newcopy(&unistr, lbobj)) == NULL)
 		return NULL;
-            return result;
-        }
-        for (i = 0; i < gcstr->gclen && gcstr->gcstr[i].lbc == LB_SP; i++) ;
-        if ((result = gcstring_substr(gcstr, i, gcstr->gclen, NULL)) == NULL)
-            return NULL;
-        return result;
+	    return result;
+	}
+	for (i = 0; i < gcstr->gclen && gcstr->gcstr[i].lbc == LB_SP; i++) ;
+	if ((result = gcstring_substr(gcstr, i, gcstr->gclen)) == NULL)
+	    return NULL;
+	return result;
+
     default:
 	errno = 0;
-        return NULL;
+	return NULL;
     }
 }
 
@@ -156,7 +162,7 @@ gcstring_t *linebreak_format_TRIM(linebreak_t *lbobj,
  * @param[in] str text to be broken.
  * @return new text or, if no modification needed, NULL.
  *
- * Built-in urgent breaking brehaviors specified by C<UrgentBreaking>.
+ * There are two built-in urgent breaking callbacks.
  */
 
 gcstring_t *linebreak_urgent_ABORT(linebreak_t *lbobj, gcstring_t *str)
@@ -181,7 +187,7 @@ gcstring_t *linebreak_urgent_FORCE(linebreak_t *lbobj, gcstring_t *str)
 	double cols;
 
 	for (i = 0; i < s->gclen; i++) {
-	    t = gcstring_substr(s, 0, i + 1, NULL);
+	    t = gcstring_substr(s, 0, i + 1);
 	    if (lbobj->sizing_func != NULL)
 		cols = (*(lbobj->sizing_func))(lbobj, 0.0, &empty, &empty, t);
 	    else
@@ -192,13 +198,13 @@ gcstring_t *linebreak_urgent_FORCE(linebreak_t *lbobj, gcstring_t *str)
 		break;
 	}
 	if (0 < i) {
-	    t = gcstring_substr(s, 0, i, NULL);
+	    t = gcstring_substr(s, 0, i);
 	    if (t->gclen) {
 		t->gcstr[0].flag = LINEBREAK_FLAG_BREAK_BEFORE;
 		gcstring_append(result, t);
 	    }
 	    gcstring_destroy(t);
-	    t = gcstring_substr(s, i, s->gclen - i, NULL);
+	    t = gcstring_substr(s, i, s->gclen - i);
 	    gcstring_destroy(s);
 	    s = t;
 

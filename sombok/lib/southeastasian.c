@@ -77,7 +77,8 @@ void linebreak_southeastasian_flagbreak(gcstring_t *gcstr)
 			    gcstr->lbobj,
 			    gcstr->str[gcstr->gcstr[i].idx - 1])
 			 != LB_SA)
-		    /* bogus breaking by non-SA grapheme extender. */
+		    /* bogus breaking by libthai on non-SA grapheme extender
+		     * (e.g. SA CM). */
 		    ;
 		else
 		    gcstr->gcstr[i].flag = 
@@ -95,3 +96,4 @@ void linebreak_southeastasian_flagbreak(gcstring_t *gcstr)
     free(buf);
 #endif /* USE_LIBTHAI */
 }
+

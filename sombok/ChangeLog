@@ -1,5 +1,9 @@
-2011.0	Xxx Jan XX 2011 
-	* New major release.
+2011.0b2	Thu Jan 20 2011
+	* Fix: Eliminated all (maybe, ...hopefully) memory leaks.
+	* Chg: split part of gcstring_substr() to gcstring_replace().
+
+2011.0b1	Sun Jan 15 2011 
+	* First beta of new major release.
 
 Important Changes beside Linebreak 1.x:
 

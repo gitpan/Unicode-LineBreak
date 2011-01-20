@@ -153,3 +153,4 @@ void linebreak_charprop(linebreak_t *obj, unichar_t c,
     if (gbcptr) *gbcptr = gbc;
     if (scrptr) *scrptr = scr;
 }
+
