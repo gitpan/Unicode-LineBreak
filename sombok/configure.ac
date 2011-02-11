@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT(sombok, 2011.0RC, hatuka@nezumi.nu)
+AC_INIT(sombok, 2011.1RC, hatuka@nezumi.nu)
 DEFAULT_UNICODE_VERSION="6.0.0"
 LPATH="$PATH:/usr/local/bin"
 
@@ -38,7 +38,7 @@ PKG_CHECK_MODULES(LIBTHAI, [libthai],
   [LIBTHAI="libthai/`$PKG_CONFIG --modversion libthai`"], [LIBTHAI=])
 AC_MSG_CHECKING(whether libthai support enabled)
 AC_ARG_ENABLE(libthai,
-  [  --disable-libthai       Disable libthai support],
+  AC_HELP_STRING(--disable-libthai, [Disable libthai support]),
   [],
   [enable_libthai=yes])
 if test -z "$LIBTHAI"
@@ -66,5 +66,60 @@ AC_CHECK_FILE([lib/$UNICODE_VERSION.c],
   AC_MSG_ERROR(unknown Unicode version $UNICODE_VERSION))
 AC_SUBST(UNICODE_VERSION)
 
-AC_CONFIG_FILES(Makefile sombok.pc sombok.spec)
+AC_ARG_ENABLE(malloc-debug,
+  AC_HELP_STRING(--enable-malloc-debug,
+    [Enable codes to debug memory allocation/deallocation]),
+  [MALLOC_DEBUG=yes],
+  [])
+AM_CONDITIONAL(MALLOC_DEBUG, [test "$MALLOC_DEBUG" = "yes"])
+if test "$MALLOC_DEBUG" = "yes"
+then
+  AC_MSG_RESULT(use mymalloc.)
+  AC_DEFINE_UNQUOTED(MALLOC_DEBUG, "$MALLOC_DEBUG",
+    [ Set this to use mymalloc wrapper. ])
+  AC_SUBST(MALLOC_DEBUG)
+fi
+
+AC_MSG_CHECKING(which shell program will be used)
+AC_ARG_WITH(shell-program,
+  AC_HELP_STRING(--with-shell-program=program,
+  [shell program used by test suite]),
+  sombok_shell_program=$withval,sombok_shell_program=none)
+if test "$sombok_shell_program" '!=' "none" -a \
+    "`basename $sombok_shell_program`" = "$sombok_shell_program"
+then
+  sombok_names="$sombok_shell_program"
+  sombok_shell_program="none"
+else
+  sombok_names="sh ash dash bash bash2 ksh dtksh pdksh"
+fi
+if test "$sombok_shell_program" = "none"
+then
+  for sombok_path in /bin /usr/bin /usr/sfw/bin /usr/xpg4/bin /usr/dt/bin \
+      /usr/local/bin /usr/gnu/bin
+  do
+    for sombok_name in $sombok_names
+    do
+      if test -x "$sombok_path/$sombok_name"
+      then
+	if test "`$sombok_path/$sombok_name -c 'echo $1' arg0 arg1`" = "arg1"
+	then
+	  sombok_shell_program="$sombok_path/$sombok_name"
+	    AC_DEFINE_UNQUOTED(SHELL_PROGRAM, "$sombok_shell_program",
+	  [ Shell program. ])
+	  AC_DEFINE_UNQUOTED(SHELL_NAME, "$sombok_name",
+	    [ Name of shell. ])
+	  break
+	fi
+      fi
+    done
+    if test "$sombok_shell_program" '!=' "none"
+    then
+      break
+    fi
+  done
+fi
+AC_MSG_RESULT($sombok_shell_program)
+
+AC_CONFIG_FILES(Makefile sombok.pc sombok.spec doc/doxyfile)
 AC_OUTPUT

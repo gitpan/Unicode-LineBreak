@@ -18,9 +18,9 @@
 #include "sombok_constants.h"
 #include "sombok.h"
 
-extern void linebreak_charprop(linebreak_t *, unichar_t,
-			       propval_t *, propval_t *, propval_t *,
-			       propval_t *);
+/** @defgroup gcstring gcstring
+ * @brief Grapheme cluster string
+ *@{*/
 
 #define eaw2col(e) (((e) == EA_F || (e) == EA_W)? 2: (((e) == EA_Z)? 0: 1))
 
@@ -246,7 +246,7 @@ gcstring_t *gcstring_newcopy(unistr_t *str, linebreak_t *lbobj)
  * Free memories allocated for grapheme cluster string.
  * @param[in] gcstr grapheme cluster string.
  * @return none.
- * If gcstr is NULL, do nothing.
+ * If gcstr was NULL, do nothing.
  */
 void gcstring_destroy(gcstring_t *gcstr)
 {
@@ -539,7 +539,7 @@ void gcstring_shrink(gcstring_t *gcstr, int length)
  */
 gcstring_t *gcstring_substr(gcstring_t *gcstr, int offset, int length)
 {
-    gcstring_t *new, *tail;
+    gcstring_t *new;
     size_t ulength, i;
 
     if (gcstr == NULL)
@@ -605,9 +605,10 @@ gcstring_t *gcstring_substr(gcstring_t *gcstr, int offset, int length)
  *
  * Replace substring og grapheme cluster string.
  * Offset and length are specified by number of grapheme clusters.
- * @param[in] gcstr grapheme cluster string.  Must not be NULL.
+ * @param[in,out] gcstr grapheme cluster string.  Must not be NULL.
  * @param[in] offset Offset of substring.
  * @param[in] length Length of substring.
+ * offset and length must not be out of range.
  * @param[in] replacement If this was not NULL, modify grapheme cluster string by replacing substring with it.
  * @return modified gcstr itself (not a copy of it).
  * If error occurred, errno is set to non-zero then NULL is returned.
