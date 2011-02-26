@@ -83,7 +83,7 @@ ja-k.ns.out
 
 fr.fixed.out
 ja.fixed.out
-    same as default but en empty line is inserted after paragraphs.
+    same as default but an empty line is inserted after each paragraph.
 fr.flowed.out
 ja.flowed.out
     RFC 3676 ``Format="FLOWED"; DelSp="YES"'' format.
@@ -155,9 +155,13 @@ ja.wrap.out
 13 RFC 3676
 -----------
 
+fr.flowed.out
+ja.flowed.out
+    folding by RFC 3676 ``Format="FLOWED"; DelSp="YES"'' method.
 flowedsp.in
 flowedsp.out
-    unfolding RFC 3676 ``Format="FLOWED"; DelSp="YES"'' format.
+    unfolding RFC 3676 ``Format="FLOWED"; DelSp="NO"'' (obsoleted
+    RFC 2646) format.
 
 14 Non-South East Asian context
 -------------------------------
