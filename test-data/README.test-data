@@ -90,6 +90,14 @@ ja.flowed.out
 fr.plain.out
 ja.plain.out
     same as default.
+quotes.in
+    unfolded e-mail text with one problematic line.
+quotes.norm.in
+    unfolded e-mail text without problematic lines.
+quotes.fixed.out
+quotes.flowed.out
+quotes.plain.out
+    folded e-mail text by three methods as above.
 
 05 Long lines
 -------------
