@@ -1,4 +1,20 @@
-2011.3  Sun Mar 13 2011
+2011.4  Fri Apr 01 2011
+	* Added Debian packaging info.
+	* Makefile.am:
+	  - increase -version-info from 4.1.1 to 4.2.1.
+	  - added doc rules.
+	* sombok.h.in: new macro SOMBOK_VERSION.
+
+2011.4RC  Sat Mar 26 2011
+	* charprop.c, break.c: Fix groundless coding denied by honest C
+	  compilers (e.g. Solaris cc).
+	* Makefile.am: Added README.ja_JP to EXTRA_DIST.
+	* tests/lb.sh: function definition suitable for both bash and d?ash.
+
+2011.3  Mon Mar 21 2011
+	* tests/01break.t: Added tests for Vietnamese.
+
+2011.3RC  Sun Mar 13 2011
 	* configure.ac: unichar_t may be unsigned int or unsigned long.
 	* include/sombok.h: now generated from include/sombok.h.in.
 	* Bug Fix: southeastasian.c: th_wbrk() may return 0 _or_ -1 when

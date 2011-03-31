@@ -1,3 +1,11 @@
+2011.04  Fri Apr 01 2011
++ perl-Unicode-LineBreak.spec
+  - RPM spec file.
+! LineBreak.xs
+  - New constant SOMBOK_VERSION.
+! Makefile.PL
+  - requires sombok >= 2011.4: compilation failed by Solaris cc.
+
 2011.03.21  Mon Mar 21 2011
 ! Makefile.PL
   - MYEXTLIB: avoid compilation failure due to parallel execution by make.
