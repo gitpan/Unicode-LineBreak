@@ -32,6 +32,9 @@ el.out
 fr.in
 fr.out
     French
+he.in
+he.out
+    Hebrew
 ja.in
 ja.out
     Japanese
@@ -188,6 +191,6 @@ Other useful test data
 
 * LineBreakTest.txt file in Unicode Character Database (UCD) may be
   useful for regression test:
-    http://www.unicode.org/Public/UCD/
+    http://www.unicode.org/Public/UNIDATA/auxiliary/LineBreakTest.txt
 
 $$
