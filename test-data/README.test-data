@@ -190,7 +190,8 @@ Other useful test data
 ----------------------
 
 * LineBreakTest.txt file in Unicode Character Database (UCD) may be
-  useful for regression test:
+  useful for regression test.  Current version of this file will be
+  found at:
     http://www.unicode.org/Public/UNIDATA/auxiliary/LineBreakTest.txt
 
 $$
