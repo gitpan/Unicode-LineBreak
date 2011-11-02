@@ -1120,9 +1120,7 @@ lbrule(self, b_idx, a_idx)
     CODE:
 	if (!SvOK(ST(1)) || !SvOK(ST(2)))
 	    XSRETURN_UNDEF;
-	if (self == NULL)
-	    XSRETURN_UNDEF;
-	RETVAL = linebreak_get_lbrule(self, b_idx, a_idx);
+	RETVAL = linebreak_lbrule(b_idx, a_idx);
 	if (RETVAL == PROP_UNKNOWN)
 	    XSRETURN_UNDEF;
     OUTPUT:

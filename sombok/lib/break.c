@@ -263,7 +263,6 @@ gcstring_t *_urgent_break(linebreak_t * lbobj, gcstring_t * str)
  *
  * @note This method gives just approximate description of line breaking
  * behavior.  Especially, it won't give meaningful value related to class AI.  
- * See also linebreak_get_lbrule().
  *
  */
 static
@@ -291,10 +290,7 @@ propval_t linebreak_lbrule(propval_t b_idx, propval_t a_idx)
     case LB_XX:
     /* LB10: Resolve CM to AL. */
     case LB_CM:
-    /* Resolve HL to AL. */
-    case LB_HL:
 	b_idx = LB_AL;
-	break;
     }
 
     /* Resolve after-side class. */
@@ -329,11 +325,6 @@ propval_t linebreak_lbrule(propval_t b_idx, propval_t a_idx)
 	a_idx = LB_AL;
 	if (b_idx == LB_CM)
 	    b_idx = LB_AL;
-	break;
-
-    /* Resolve HL to AL. */
-    case LB_HL:
-	a_idx = LB_AL;
 	break;
     }
 
@@ -439,61 +430,6 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		i--;
 	    }
 
-#ifdef LB_HL
-    /* LB21a (as of 6.1.0): HL (HY | BA) × [^ CB] */
-    if (str != NULL && str->gclen) {
-	for (i = 0, j = 0; i < str->len; i++) {
-	    /* HL */
-	    if (linebreak_lbclass(lbobj, str->str[i]) == LB_HL)
-		i++;
-	    else
-		continue;
-
-	    /* CM* */
-	    while (i < str->len &&
-		   linebreak_lbclass(lbobj, str->str[i]) == LB_CM)
-		i++;
-	    if (str->len <= i)
-		break;
-
-	    /* (HY|BA) */
-	    if (linebreak_lbclass(lbobj, str->str[i]) == LB_HY ||
-		linebreak_lbclass(lbobj, str->str[i]) == LB_BA)
-		i++;
-	    else
-		continue;
-
-	    /* CM* */
-	    while (i < str->len &&
-		   linebreak_lbclass(lbobj, str->str[i]) == LB_CM)
-		i++;
-	    if (str->len <= i)
-		break;
-
-	    /* [^CB] */
-	    switch (linebreak_lbclass(lbobj, str->str[i])) {
-	    /* prohibit break by default */
-	    case LB_BK: /* LB6 */
-	    case LB_CR:
-	    case LB_LF:
-	    case LB_NL:
-	    case LB_SP: /* LB7 */
-	    case LB_ZW:
-	    case LB_CM: /* LB9 */
-	    case LB_WJ: /* LB11 */
-	    /* allow break by default */
-	    case LB_CB: /* LB20 */
-		continue;
-	    }
-
-	    while (str->gcstr[j].idx < i)
-		j++;
-	    if (str->gcstr[j].idx == i && ! str->gcstr[j].flag)
-		str->gcstr[j].flag = LINEBREAK_FLAG_PROHIBIT_BEFORE;
-	}
-    }
-#endif /* LB_HL */
-
     /* LB25: not break in (PR|PO)? (OP|HY)? NU (NU|SY|IS)* (CL|CP)? (PR|PO)? */
     if (str != NULL && str->gclen) {
         size_t st, et;
@@ -528,8 +464,12 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		while (i < str->len &&
 		       linebreak_lbclass(lbobj, str->str[i]) == LB_CM)
 		    i++;
-		if (str->len <= i)
-		    goto LB25_BREAK;
+		if (str->len <= i) {
+		    if (eot)
+			goto LB25_BREAK;
+		    else
+			goto LB25_FOUND; /* save possible partial sequence. */
+		}
 	    }
 
 	    /* NU (NU|SY|IS)* */
@@ -810,10 +750,6 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		case LB_CM:
 		    blbc = LB_AL;
 		    break;
-		/* LB21a (as of 6.1.0): Treat HL as AL. */
-		case LB_HL:
-		    blbc = LB_AL;
-		    break;
 		/* LB27: Treat hangul syllable as if it were ID (or AL). */
 		case LB_H2:
 		case LB_H3:
@@ -836,10 +772,6 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		    break;
 		/* LB10: Treat any remaining CM+ as if it were AL. */
 		case LB_CM:
-		    albc = LB_AL;
-		    break;
-		/* LB21a (as of 6.1.0): Treat HL as AL. */
-		case LB_HL:
 		    albc = LB_AL;
 		    break;
 		/* LB27: Treat hangul syllable as if it were ID (or AL). */

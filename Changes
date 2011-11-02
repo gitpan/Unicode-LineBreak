@@ -1,29 +1,23 @@
-2011.010_26  Wed Oct 26 2011
+2011.11  Tue Nov 01 2011
+# Backport from trunk with Unicode data 6.0.0.
 + debian/*
   - Added Debian packaging info at Debian sid, packaged by Emmanuel Bouthenot.
+! GPL
+  - Street address of FSF: CPAN RT #69999.
 ! lib/Text/LineFold.pm:
   - Bump up version to 2011.10.
   - _is_indirect(): Simplified as enhancement of lbrule().
-! LineBreak.xs:
-  - lbrule(): Use new linebreak_get_lbrule() instead of linebreak_lbrule().
-! Makefile.PL
-  - Try getting LineBreakTest.txt for test #00.
-! t/00LineBreakText.t
-  - Now all tests shall be past.
-! sombok/*
-  - Bundled Sombok 2.0.6beta2.
-
-2011.010_21  Fri Oct 21 2011
-! GPL
-  - Street address of FSF: CPAN RT #69999.
 ! lib/Unicode/LineBreak.pod
 ! lib/Unicode/LineBreak/JA_JP.pod
   - Some updates.
 ! Makefile.PL
-  - Requires Sombok >= 2.0.6.
+  - Bundle LineBreakTest.txt in dist for test #00.
 ! META.yml
   - Quote abstract containing `#'.
-! t/00LineBreakTest.t
+! sombok/*
+  - Bundled Sombok 2.0.6.
+! t/00LineBreakText.t
+  - Now all tests shall be past.
   - Add test names.
 ! t/01break.t
   - Added Hebrew (he) test.

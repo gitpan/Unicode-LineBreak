@@ -114,7 +114,8 @@ I<インスタンスメソッド>。
 返値については L</定数> を参照。
 
 B<注>:
-このメソッドは、行分割動作のおおまかな動作を表す値を返すにすぎない。
+このメソッドは、行分割のおおまかな動作を表す値を返すにすぎない。
+特に、分類 AI に関しては意味のある値を返さない。
 
 =item $self->strsize (LEN, PRE, SPC, STR)
 
@@ -347,13 +348,12 @@ L</Prep> の旧式な形式。
 
 [UAX #11] で定義される 6 つの East_Asian_Width 特性を表す値と、前進を伴わないことを表す EA_Z。
 
-=item C<LB_BK>, C<LB_CR>, C<LB_LF>, C<LB_NL>, C<LB_SP>, C<LB_OP>, C<LB_CL>, C<LB_CP>, C<LB_QU>, C<LB_GL>, C<LB_NS>, C<LB_EX>, C<LB_SY>, C<LB_IS>, C<LB_PR>, C<LB_PO>, C<LB_NU>, C<LB_AL>, C<LB_ID>, C<LB_HL>, C<LB_IN>, C<LB_HY>, C<LB_BA>, C<LB_BB>, C<LB_B2>, C<LB_CB>, C<LB_ZW>, C<LB_CM>, C<LB_WJ>, C<LB_H2>, C<LB_H3>, C<LB_JL>, C<LB_JV>, C<LB_JT>, C<LB_SG>, C<LB_AI>, C<LB_SA>, C<LB_XX>
+=item C<LB_BK>, C<LB_CR>, C<LB_LF>, C<LB_NL>, C<LB_SP>, C<LB_OP>, C<LB_CL>, C<LB_CP>, C<LB_QU>, C<LB_GL>, C<LB_NS>, C<LB_EX>, C<LB_SY>, C<LB_IS>, C<LB_PR>, C<LB_PO>, C<LB_NU>, C<LB_AL>, C<LB_ID>, C<LB_IN>, C<LB_HY>, C<LB_BA>, C<LB_BB>, C<LB_B2>, C<LB_CB>, C<LB_ZW>, C<LB_CM>, C<LB_WJ>, C<LB_H2>, C<LB_H3>, C<LB_JL>, C<LB_JV>, C<LB_JT>, C<LB_SG>, C<LB_AI>, C<LB_SA>, C<LB_XX>
 
-[UAX #14] で定義される 38 の行分割特性 (分類) を表す値。
+[UAX #14] で定義される 37 の行分割特性 (分類) を表す値。
 
 B<注>:
 特性値 CP はUnicode 5.2.0版で導入された。
-特性値 HL はUnicode 6.1.0版で導入されそう。
 
 =item C<MANDATORY>, C<DIRECT>, C<INDIRECT>, C<PROHIBITED>
 
@@ -663,8 +663,7 @@ L<http://hatuka.nezumi.nu/repos/Unicode-LineBreak/>
 
 =head2 標準への適合性
 
-このモジュールで用いている文字の特性値は、Unicode 標準 6.1.0ベータ版 (2011-09-19現在) による。
-B<このデータはベータ公開版である。本番システムで使わないように>。
+このモジュールで用いている文字の特性値は、Unicode 標準 6.0.0版による。
 
 このモジュールでは、実装水準 UAX14-C2 を実装しているつもり。
 
