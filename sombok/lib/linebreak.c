@@ -1,7 +1,7 @@
 /*
  * linebreak.c - implementation of Linebreak object.
  * 
- * Copyright (C) 2009-2011 by Hatuka*nezumi - IKEDA Soji.
+ * Copyright (C) 2009-2012 by Hatuka*nezumi - IKEDA Soji.
  *
  * This file is part of the Sombok Package.  This program is free
  * software; you can redistribute it and/or modify it under the terms
@@ -483,6 +483,42 @@ void linebreak_reset(linebreak_t * lbobj)
     lbobj->errnum = 0;
 }
 
+/** Get breaking rule between two classes
+ *
+ * From given two line breaking classes, get breaking rule determined by
+ * internal data.
+ * @param[in] obj linebreak object, must not be NULL.
+ * @param[in] a_idx line breaking class.
+ * @param[in] b_idx line breaking class.
+ * @return line breaking action: MANDATORY, DIRECT, INDIRECT or PROHIBITED.
+ * If action was not determined, returns DIRECT.
+ *
+ * @note This method gives just approximate description of line breaking
+ * behavior.  Class AI and CJ will be resolved to approppriate classes.
+ * See also linebreak_lbrule().
+ *
+ * @note This method was introduced by Sombok 2.0.6. 
+ *
+ */
+propval_t linebreak_get_lbrule(linebreak_t * obj, propval_t b_idx,
+			       propval_t a_idx)
+{
+    if (b_idx == LB_AI)
+	b_idx = (obj->options & LINEBREAK_OPTION_EASTASIAN_CONTEXT) ?
+		LB_ID : LB_AL;
+    else if (b_idx == LB_CJ)
+	b_idx = (obj->options & LINEBREAK_OPTION_NONSTARTER_LOOSE) ?
+		LB_ID : LB_NS;
+    if (a_idx == LB_AI)
+	a_idx = (obj->options & LINEBREAK_OPTION_EASTASIAN_CONTEXT) ?
+		LB_ID : LB_AL;
+    else if (a_idx == LB_CJ)
+	a_idx = (obj->options & LINEBREAK_OPTION_NONSTARTER_LOOSE) ?
+		LB_ID : LB_NS;
+
+    return linebreak_lbrule(b_idx, a_idx);
+}
+
 /** Get Line Breaking Class
  *
  * Get UAX #14 line breaking class of Unicode character.
@@ -500,8 +536,8 @@ propval_t linebreak_lbclass(linebreak_t * obj, unichar_t c)
 #ifdef USE_LIBTHAI
 	if (scr != SC_Thai)
 #endif /* USE_LIBTHAI */
-	    lbc = (gcb == GB_Extend
-		   || gcb == GB_SpacingMark) ? LB_CM : LB_AL;
+	    lbc = (gcb == GB_Extend || gcb == GB_SpacingMark
+		   || gcb == GB_Virama) ? LB_CM : LB_AL;
     }
     return lbc;
 }

@@ -3,7 +3,7 @@ Test data for line breaking
 
 Files named ``*.in'' are input text. ``*.out'' are expected outputs.
 
-Default configuration is as following. Overridden values are described
+Default configuration is as following.  Overridden values are described
 by each test data.
 
     charmax:        998
@@ -13,6 +13,7 @@ by each test data.
     format:         SIMPLE
     hangul as AL:   no
     legacy CM:      yes
+    virama sign:    behave as consonant joiner
     newline:        "\n"
     sizing:         UAX11
     tailoring EAW:  none
@@ -49,6 +50,9 @@ ko.out
 ru.in
 ru.out
     Russian
+sa.in
+sa.out
+    Sanskrit
 th.in
 th.out
     Thai
@@ -68,6 +72,7 @@ zh.out
 amitagyong.in
 amitagyong.out
     complex hangul syllables and conjoining jamo.
+    tailoring EAW:  U+302E and U+302F are nonspacing.
 ko.al.out
     treat hangul syllables and conjoining jamo as alphabetic (AL).
 
@@ -137,7 +142,8 @@ uri.break.out
     preprocessing:  break URIs according to some CMoS rules.
 uri.break.http.out
     colmax:         1
-    preprocessing:  break HTTP URLs according to some CMoS rules; never break FTP URLs.
+    preprocessing:  break HTTP URLs according to some CMoS rules; never 
+    break FTP URLs.
 uri.nonbreak.out
     colmax:         1
     preprocessing:  never break URIs.

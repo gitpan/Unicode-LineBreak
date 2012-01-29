@@ -1,7 +1,7 @@
 /*
  * Break.c - an implementation of Unicode line breaking algorithm.
  * 
- * Copyright (C) 2009-2011 by Hatuka*nezumi - IKEDA Soji.
+ * Copyright (C) 2009-2012 by Hatuka*nezumi - IKEDA Soji.
  *
  * This file is part of the Sombok Package.  This program is free
  * software; you can redistribute it and/or modify it under the terms
@@ -262,7 +262,9 @@ gcstring_t *_urgent_break(linebreak_t * lbobj, gcstring_t * str)
  * If action was not determined, returns DIRECT.
  *
  * @note This method gives just approximate description of line breaking
- * behavior.  Especially, it won't give meaningful value related to class AI.  
+ * behavior.  Especially, it won't give meaningful value related to classes
+ * AI and CJ.
+ * See also linebreak_get_lbrule().
  *
  */
 static
@@ -284,13 +286,16 @@ propval_t linebreak_lbrule(propval_t b_idx, propval_t a_idx)
     /* Resolve before-side class. */
 
     switch (b_idx) {
-    /* LB1: Resolve SA, SG, XX to AL; AI cannot be resolved. */
+    /* LB1: Resolve SA, SG, XX to AL; AI and CJ cannot be resolved. */
     case LB_SA:
     case LB_SG:
     case LB_XX:
     /* LB10: Resolve CM to AL. */
     case LB_CM:
+    /* Resolve HL to AL. */
+    case LB_HL:
 	b_idx = LB_AL;
+	break;
     }
 
     /* Resolve after-side class. */
@@ -325,6 +330,11 @@ propval_t linebreak_lbrule(propval_t b_idx, propval_t a_idx)
 	a_idx = LB_AL;
 	if (b_idx == LB_CM)
 	    b_idx = LB_AL;
+	break;
+
+    /* Resolve HL to AL. */
+    case LB_HL:
+	a_idx = LB_AL;
 	break;
     }
 
@@ -430,6 +440,59 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		i--;
 	    }
 
+    /* LB21a (as of 6.1.0): HL (HY | BA) × [^ CB] */
+    if (str != NULL && str->gclen) {
+	for (i = 0, j = 0; i < str->len; i++) {
+	    /* HL */
+	    if (linebreak_lbclass(lbobj, str->str[i]) == LB_HL)
+		i++;
+	    else
+		continue;
+
+	    /* CM* */
+	    while (i < str->len &&
+		   linebreak_lbclass(lbobj, str->str[i]) == LB_CM)
+		i++;
+	    if (str->len <= i)
+		break;
+
+	    /* (HY|BA) */
+	    if (linebreak_lbclass(lbobj, str->str[i]) == LB_HY ||
+		linebreak_lbclass(lbobj, str->str[i]) == LB_BA)
+		i++;
+	    else
+		continue;
+
+	    /* CM* */
+	    while (i < str->len &&
+		   linebreak_lbclass(lbobj, str->str[i]) == LB_CM)
+		i++;
+	    if (str->len <= i)
+		break;
+
+	    /* [^CB] */
+	    switch (linebreak_lbclass(lbobj, str->str[i])) {
+	    /* prohibit break by default */
+	    case LB_BK: /* LB6 */
+	    case LB_CR:
+	    case LB_LF:
+	    case LB_NL:
+	    case LB_SP: /* LB7 */
+	    case LB_ZW:
+	    case LB_CM: /* LB9 */
+	    case LB_WJ: /* LB11 */
+	    /* allow break by default */
+	    case LB_CB: /* LB20 */
+		continue;
+	    }
+
+	    while (str->gcstr[j].idx < i)
+		j++;
+	    if (str->gcstr[j].idx == i && ! str->gcstr[j].flag)
+		str->gcstr[j].flag = LINEBREAK_FLAG_PROHIBIT_BEFORE;
+	}
+    }
+
     /* LB25: not break in (PR|PO)? (OP|HY)? NU (NU|SY|IS)* (CL|CP)? (PR|PO)? */
     if (str != NULL && str->gclen) {
         size_t st, et;
@@ -488,10 +551,12 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		        i++;
 			break;
 
+		    /* (CL|CP) */
 		    case LB_CL:
 		    case LB_CP:
 		        goto LB25_CLCP_SUFFIX;
 
+		    /* (PR|PO) */
 		    case LB_PR:
 		    case LB_PO:
 		        goto LB25_PRPO_SUFFIX;
@@ -623,7 +688,6 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 	 ***/
 	int action = 0;
 	propval_t lbc;
-	/* gcstring_t *beforeFrg, *fmt; */
 	double newcols;
 
 	/* Go ahead reading input. */
@@ -697,7 +761,6 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		break; /* while (!gcstring_eos(str)) */
 
 	    /* shift buffers. */
-	    /* XXX bBeg += bLen + bSpc; */
 	    bLen = str->pos - bBeg;
 	    bSpc = 0;
 	    bCM = aCM;
@@ -715,7 +778,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 	    (lbc != LB_CR || eot || !gcstring_eos(str))) {
 	    /* CR at end of input may be part of CR LF therefore not be eop. */
 	    action = LINEBREAK_ACTION_MANDATORY;
-	/* LB11 - LB31: Tailorable rules (except LB11, LB12).
+	/* LB11, LB12 and tailorable rules LB13 - LB31.
 	 * Or urgent breaking. */
 	} else if (bBeg + bLen + bSpc < str->pos) {
 	    if (str->gcstr[bBeg + bLen + bSpc].flag &
@@ -742,12 +805,16 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		    blbc = str->gcstr[btail].lbc;
 		switch (blbc) {
 		/* LB1: SA is resolved to AL
-		 * (AI, SG and XX are already resolved). */
+		 * (AI, CJ, SG and XX are already resolved). */
 		case LB_SA:
 		    blbc = LB_AL;
 		    break;
 		/* LB10: Treat any remaining CM+ as if it were AL. */
 		case LB_CM:
+		    blbc = LB_AL;
+		    break;
+		/* (As of 6.1.0): Treat HL as AL. */
+		case LB_HL:
 		    blbc = LB_AL;
 		    break;
 		/* LB27: Treat hangul syllable as if it were ID (or AL). */
@@ -766,12 +833,16 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		albc = str->gcstr[bBeg + bLen + bSpc].lbc;
 		switch (albc) {
 		/* LB1: SA is resolved to AL
-		 * (AI, SG and XX are already resolved). */
+		 * (AI, CJ, SG and XX are already resolved). */
 		case LB_SA:
 		    albc = LB_AL;
 		    break;
 		/* LB10: Treat any remaining CM+ as if it were AL. */
 		case LB_CM:
+		    albc = LB_AL;
+		    break;
+		/* (As of 6.1.0): Treat HL as AL. */
+		case LB_HL:
 		    albc = LB_AL;
 		    break;
 		/* LB27: Treat hangul syllable as if it were ID (or AL). */
@@ -796,6 +867,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		/* When conjunction is expected to exceed charmax,
 		 * try urgent breaking. */
 		if (urgEnd < bBeg + bLen + bSpc &&
+		    0 < lbobj->charmax &&
 		    lbobj->charmax < str->gcstr[str->pos - 1].idx +
 		    str->gcstr[str->pos - 1].len - str->gcstr[bBeg].idx) {
 		    size_t charmax, chars;
@@ -831,7 +903,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		    str->pos = 0;
 		    bBeg = bLen = bCM = bSpc = aCM = 0;
 		    continue; /* while (1) */
-		} /* if (lbobj->charmax < ...) */
+		} /* if (urgEnd < ...) */
 
 		/* Otherwise, fragments may be conjuncted safely. Read more. */
 		bLen = str->pos - bBeg;
@@ -1240,6 +1312,35 @@ gcstring_t **linebreak_break(linebreak_t * lbobj, unistr_t * input)
 	free(appe);
     }
 
+    return ret;
+}
+
+/** Perform line breaking algorithm on UTF-8 text
+ *
+ * This function will consume constant size of heap.
+ *
+ * @param[in] lbobj linebreak object.
+ * @param[in] input UTF-8 string, must not be NULL.
+ * @param[in] len length of UTF-8 string.
+ * @param[in] check check input.  See sombok_decode_utf8().
+ * @return array of broken grapheme cluster strings terminated by NULL.
+ * If internal error occurred, lbobj->errnum is set then NULL is returned.
+ */
+gcstring_t **linebreak_break_from_utf8(linebreak_t * lbobj,
+				       char * input, size_t len, int check)
+{
+    unistr_t unistr = { NULL, 0 };
+    gcstring_t **ret;
+
+    if (input == NULL) {
+	lbobj->errnum = EINVAL;
+	return NULL;
+    }
+    if (sombok_decode_utf8(&unistr, 0, input, len, check) == NULL)
+	return NULL;
+
+    ret = linebreak_break(lbobj, &unistr);
+    free(unistr.str);
     return ret;
 }
 

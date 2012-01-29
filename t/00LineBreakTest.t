@@ -4,6 +4,8 @@
 # 00LineBreakTest.txt - Test suite provided by Unicode Consortium.
 #
 # Passed by LineBreakTest-6.0.0.txt (2010-08-30, 21:08:43 UTC).
+# Passed by LineBreakTest-6.1.0d12.txt (2011-09-16, 22:24:58 UTC).
+# Passed by LineBreakTest-6.1.0d19.txt (2011-12-07, 01:05:50 UTC).
 #
 
 use strict;

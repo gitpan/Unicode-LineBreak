@@ -5,7 +5,7 @@ package MY;
 use ExtUtils::MakeMaker;
 
 my $csubdir = 'sombok';
-my $sombok_atleast_version = '2.0.6';
+my $sombok_atleast_version = '2.1.0';
 my $sombok_max_version = '2.99.99';
 my $pkg_config = $ENV{'PKG_CONFIG'} || 'pkg-config';
 my @args = ();
@@ -52,8 +52,8 @@ sub postamble {
 copy_unidata :
 \tcd test-data; \\
 \t[ -f LineBreakTest.txt ] || \\
-\twget -q -N \\
-\thttp://unicode.org/Public/6.0.0/ucd/auxiliary/LineBreakTest.txt \\
+\twget -q -N -O LineBreakTest.txt \\
+\tftp://unicode.org/Public/6.1.0/ucd/auxiliary/LineBreakTest*.txt \\
 \t|| true
 EOF
 }

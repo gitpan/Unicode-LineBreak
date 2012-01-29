@@ -1,7 +1,7 @@
 /*
  * charprop.c - character property handling.
  * 
- * Copyright (C) 2009-2011 by Hatuka*nezumi - IKEDA Soji.
+ * Copyright (C) 2009-2012 by Hatuka*nezumi - IKEDA Soji.
  *
  * This file is part of the Sombok Package.  This program is free
  * software; you can redistribute it and/or modify it under the terms
@@ -35,8 +35,8 @@ static propval_t PROPENT_VSEL[] = { LB_CM, EA_Z, GB_Extend, SC_Inherited };
 /* Private use - XX */
 static propval_t PROPENT_PRIVATE[] = { LB_AL, EA_A, GB_Other, SC_Unknown };
 
-/* Surrogates or other unassigned - XX/SG */
-static propval_t PROPENT_UNKNOWN[] = { LB_AL, EA_N, GB_Other, SC_Unknown };
+/* Reserved or noncharacter - XX */
+static propval_t PROPENT_RESERVED[] = { LB_AL, EA_N, GB_Control, SC_Unknown };
 
 /** Search for character properties.
  * 
@@ -44,9 +44,12 @@ static propval_t PROPENT_UNKNOWN[] = { LB_AL, EA_N, GB_Other, SC_Unknown };
  *
  * * map, mapsiz: custom property map overriding built-in map.
  *
- * * options: if LINEBREAK_OPTION_EASTASIAN_CONTEXT bit is set,
+ * * options:
+ * - if LINEBREAK_OPTION_EASTASIAN_CONTEXT bit is set,
  *   LB_AI and EA_A are resolved to LB_ID and EA_F. Otherwise, LB_AL and EA_N,
  *   respectively.
+ * - if LINEBREAK_OPTION_NONSTARTER_LOOSE bit is set,
+ *   LB_CJ is resolved to LB_ID.  Otherwise it is resolved to LB_NS.
  *
  * @param[in] obj linebreak object.
  * @param[in] c Unicode character.
@@ -147,7 +150,7 @@ void linebreak_charprop(linebreak_t * obj, unichar_t c,
 		 (0x100000 <= c && c <= 0x10FFFD))
 	    ent = PROPENT_PRIVATE;
 	else
-	    ent = PROPENT_UNKNOWN;
+	    ent = PROPENT_RESERVED;
 
 	if (lbcptr && lbc == PROP_UNKNOWN)
 	    lbc = ent[0];
@@ -162,9 +165,14 @@ void linebreak_charprop(linebreak_t * obj, unichar_t c,
     /*
      * Resolve context-dependent property values.
      */
-    if (lbcptr && lbc == LB_AI)
-	lbc = (obj->options & LINEBREAK_OPTION_EASTASIAN_CONTEXT) ?
-	    LB_ID : LB_AL;
+    if (lbcptr) {
+	if (lbc == LB_AI)
+	    lbc = (obj->options & LINEBREAK_OPTION_EASTASIAN_CONTEXT) ?
+		  LB_ID : LB_AL;
+	else if (lbc == LB_CJ)
+	    lbc = (obj->options & LINEBREAK_OPTION_NONSTARTER_LOOSE) ?
+		  LB_ID : LB_NS;
+    }
     if (eawptr && eaw == EA_A)
 	eaw = (obj->options & LINEBREAK_OPTION_EASTASIAN_CONTEXT) ?
 	    EA_F : EA_N;

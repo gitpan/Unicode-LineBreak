@@ -1,6 +1,7 @@
 Sombok - Unicode Text Segmentation Package.
 
-Copyright (C) 2009-2011 by Hatuka*nezumi - IKEDA Soji.
+Copyright (C) 2009-2012 by Hatuka*nezumi - IKEDA Soji.
+
 This file is part of the Sombok Package.  This program is free
 software; you can redistribute it and/or modify it under the terms of
 the GNU General Public License as published by the Free Software
@@ -55,6 +56,10 @@ $Id$
 
 Perl
     Unicode-LineBreak: http://search.cpan.org/dist/Unicode-LineBreak/
+
+Python
+    textseg: https://linefold.svn.sf.net/svnroot/linefold/trunk/pytextseg
+             (開発中)
 
 著者
 ====
