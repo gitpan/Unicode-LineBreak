@@ -1,24 +1,30 @@
-Sombok - Unicode Text Segmentation Package.
+=========================================
+Sombok - ユニコードテキスト分節パッケージ
+=========================================
 
-Copyright (C) 2009-2012 by Hatuka*nezumi - IKEDA Soji.
+Sombok is Copyright (C) 2009-2012, by Hatuka*nezumi - IKEDA Soji.
 
-This file is part of the Sombok Package.  This program is free
-software; you can redistribute it and/or modify it under the terms of
-the GNU General Public License as published by the Free Software
-Foundation; either version 2 of the License, or (at your option) any
-later version.  This program is distributed in the hope that it will
-be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
-of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-COPYING file for more details.
+It is free software; you can redistribute it and/or modify it under the
+terms of either:
+
+a) the GNU General Public License as published by the Free Software
+   Foundation; either version 2, or (at your option) any later version,
+   or
+
+b) the "Artistic License".
+
+----
+
+See the COPYING and the ARTISTIC files for more details.
 
 これはなにか
 ============
 
-ソンボク ライブラリパッケージは、ユニコード標準附属書14 (UAX #14) に述べ
-る「ユニコード行分割アルゴリズム」を実行できます。附属書11 (UAX #11) で
-定義する East_AsianWidth 参考特性を考慮して行分割位置を決定できます。
-またこのパッケージでは、附属書29 (UAX #29) で述べる「初期の」書記素クラ
-スタをも実装しています。
+ソンボク (sombok) ライブラリパッケージは、ユニコード標準附属書14 (UAX 
+#14) に述べる「ユニコード行分割アルゴリズム」を実行できます。附属書11 
+(UAX #11) で定義する East_AsianWidth 参考特性を考慮して行分割位置を決定
+できます。またこのパッケージでは、附属書29 (UAX #29) で述べる「初期の」
+書記素クラスタをも実装しています。
 
 ソンボクの入手
 ==============
@@ -33,18 +39,23 @@ COPYING file for more details.
 
 * 必須ではありませんが、タイ語の単語分節に対応するには libthai パッケー
   ジをインストールする必要があります。次の場所で入手できます。
+
     http://linux.thai.net/projects/libthai
+
   この場合、pkg-config も要ります。
 
 インストール
 ============
 
-配布物を展開し、次のように実行します::
+配布物を展開し、次のように実行します。
 
-  $ ./configure [オプション……]
-  $ make
-  $ make check
-  # make install
+  ./configure [オプション……]
+
+  make
+
+  make check
+
+  make install
 
 ``./configure --help`` を実行すれば、どんなオプションが使えるかわかりま
 す。

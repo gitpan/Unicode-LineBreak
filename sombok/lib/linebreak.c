@@ -4,15 +4,10 @@
  * Copyright (C) 2009-2012 by Hatuka*nezumi - IKEDA Soji.
  *
  * This file is part of the Sombok Package.  This program is free
- * software; you can redistribute it and/or modify it under the terms
- * of the GNU General Public License as published by the Free Software
- * Foundation; either version 2 of the License, or (at your option)
- * any later version.  This program is distributed in the hope that
- * it will be useful, but WITHOUT ANY WARRANTY; without even the
- * implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
- * PURPOSE.  See the COPYING file for more details.
+ * software; you can redistribute it and/or modify it under the terms of
+ * either the GNU General Public License or the Artistic License, as
+ * specified in the README file.
  *
- * $id$
  */
 
 #include "sombok_constants.h"
@@ -490,8 +485,8 @@ void linebreak_reset(linebreak_t * lbobj)
  * From given two line breaking classes, get breaking rule determined by
  * internal data.
  * @param[in] obj linebreak object, must not be NULL.
- * @param[in] a_idx line breaking class.
- * @param[in] b_idx line breaking class.
+ * @param[in] albc line breaking class.
+ * @param[in] blbc line breaking class.
  * @return line breaking action: MANDATORY, DIRECT, INDIRECT or PROHIBITED.
  * If action was not determined, returns DIRECT.
  *
@@ -500,25 +495,53 @@ void linebreak_reset(linebreak_t * lbobj)
  * See also linebreak_lbrule().
  *
  * @note This method was introduced by Sombok 2.0.6. 
+ * @note LEGACY_CM and HANGUL_AS_AL options are concerned as of Sombok 2.1.2.
  *
  */
-propval_t linebreak_get_lbrule(linebreak_t * obj, propval_t b_idx,
-			       propval_t a_idx)
+propval_t linebreak_get_lbrule(linebreak_t * obj, propval_t blbc,
+			       propval_t albc)
 {
-    if (b_idx == LB_AI)
-	b_idx = (obj->options & LINEBREAK_OPTION_EASTASIAN_CONTEXT) ?
+    switch (blbc) {
+    case LB_AI:
+	blbc = (obj->options & LINEBREAK_OPTION_EASTASIAN_CONTEXT) ?
 	    LB_ID : LB_AL;
-    else if (b_idx == LB_CJ)
-	b_idx = (obj->options & LINEBREAK_OPTION_NONSTARTER_LOOSE) ?
+	break;
+    case LB_CJ:
+	blbc = (obj->options & LINEBREAK_OPTION_NONSTARTER_LOOSE) ?
 	    LB_ID : LB_NS;
-    if (a_idx == LB_AI)
-	a_idx = (obj->options & LINEBREAK_OPTION_EASTASIAN_CONTEXT) ?
-	    LB_ID : LB_AL;
-    else if (a_idx == LB_CJ)
-	a_idx = (obj->options & LINEBREAK_OPTION_NONSTARTER_LOOSE) ?
-	    LB_ID : LB_NS;
+	break;
+    /* Legacy-CM */
+    /* This rule follows SP* ÷ SP × CM, not SP × SP+ ÷ CM.
+     * But for simplicity treat it as indirect break. */
+    case LB_SP:
+	if (albc == LB_CM && obj->options & LINEBREAK_OPTION_LEGACY_CM)
+	    return LINEBREAK_ACTION_INDIRECT;
+	break;
+    /* Optionally, treat hangul syllable as if it were AL. */
+    case LB_H2:
+    case LB_H3:
+    case LB_JL:
+    case LB_JV:
+    case LB_JT:
+	if ((albc == LB_H2 || albc == LB_H3 || albc == LB_JL ||
+	     albc == LB_JV || albc == LB_JT) &&
+	    obj->options & LINEBREAK_OPTION_HANGUL_AS_AL)
+	    return LINEBREAK_ACTION_INDIRECT;
+	break;
+    }
 
-    return linebreak_lbrule(b_idx, a_idx);
+    switch (albc) {
+    case LB_AI:
+	albc = (obj->options & LINEBREAK_OPTION_EASTASIAN_CONTEXT) ?
+	    LB_ID : LB_AL;
+	break;
+    case LB_CJ:
+	albc = (obj->options & LINEBREAK_OPTION_NONSTARTER_LOOSE) ?
+	    LB_ID : LB_NS;
+	break;
+    }
+
+    return linebreak_lbrule(blbc, albc);
 }
 
 /** Get Line Breaking Class

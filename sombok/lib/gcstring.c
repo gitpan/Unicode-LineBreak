@@ -1,18 +1,13 @@
 /*
  * gcstring.c - implementation of grapheme cluster string.
  * 
- * Copyright (C) 2009-2011 by Hatuka*nezumi - IKEDA Soji.
+ * Copyright (C) 2009-2012 by Hatuka*nezumi - IKEDA Soji.
  *
  * This file is part of the Sombok Package.  This program is free
- * software; you can redistribute it and/or modify it under the terms
- * of the GNU General Public License as published by the Free Software
- * Foundation; either version 2 of the License, or (at your option)
- * any later version.  This program is distributed in the hope that
- * it will be useful, but WITHOUT ANY WARRANTY; without even the
- * implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
- * PURPOSE.  See the COPYING file for more details.
+ * software; you can redistribute it and/or modify it under the terms of
+ * either the GNU General Public License or the Artistic License, as
+ * specified in the README file.
  *
- * $id$
  */
 
 #include "sombok_constants.h"
@@ -539,6 +534,8 @@ gcchar_t *gcstring_next(gcstring_t *gcstr)
  * @param[in] pos New position.
  * @return none.
  * If pos is out of range of string, position won't be updated.
+ *
+ * @todo On next major release, pos would be ssize_t, not int.
  */
 void gcstring_setpos(gcstring_t *gcstr, int pos)
 {
@@ -557,6 +554,8 @@ void gcstring_setpos(gcstring_t *gcstr, int pos)
  * @param[in] length New length.
  * @return none.
  * If gcstr was NULL, do nothing.
+ *
+ * @todo On next major release, length would be ssize_t, not int.
  */
 void gcstring_shrink(gcstring_t *gcstr, int length)
 {
@@ -590,6 +589,8 @@ void gcstring_shrink(gcstring_t *gcstr, int length)
  * @param[in] length Length of substring.
  * @return (newly allocated) substring.
  * If error occurred, errno is set to non-zero then NULL is returned.
+ *
+ * @todo On next major release, offset and length would be ssize_t, not int.
  */
 gcstring_t *gcstring_substr(gcstring_t *gcstr, int offset, int length)
 {
@@ -666,6 +667,8 @@ gcstring_t *gcstring_substr(gcstring_t *gcstr, int offset, int length)
  * @param[in] replacement If this was not NULL, modify grapheme cluster string by replacing substring with it.
  * @return modified gcstr itself (not a copy of it).
  * If error occurred, errno is set to non-zero then NULL is returned.
+ *
+ * @todo On next major release, offset and length would be ssize_t, not int.
  */
 gcstring_t *gcstring_replace(gcstring_t *gcstr, int offset, int length,
 			     gcstring_t *replacement)
