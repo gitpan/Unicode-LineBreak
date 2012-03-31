@@ -246,6 +246,7 @@ gcstring_t *_urgent_break(linebreak_t * lbobj, gcstring_t * str)
     }
 
 /** @fn propval_t linebreak_lbrule(propval_t b_idx, propval_t a_idx)
+ * @deprecated Use linebreak_get_lbrule().
  *
  * Get breaking rule between two classes
  *
@@ -300,12 +301,12 @@ propval_t linebreak_lbrule(propval_t b_idx, propval_t a_idx)
     case LB_SA:
     case LB_SG:
     case LB_XX:
-        a_idx = LB_AL;
-        break;
+	a_idx = LB_AL;
+	break;
 
     /* LB9, LB10 */
     case LB_CM:
-	/* LB9: Treat X CM as if it were X, with some exceptions. */
+    /* LB9: Treat X CM as if it were X, with some exceptions. */
 	switch (b_idx) {
 	case LB_BK:
 	case LB_CR:
@@ -372,7 +373,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
     gcstring_t *s = NULL, *t = NULL, *beforeFrg = NULL, *fmt = NULL,
 	*broken = NULL;
     unistr_t unistr;
-    size_t i, j;
+    size_t i;
     gcstring_t empty = { NULL, 0, NULL, 0, 0, lbobj };
 
     /***
@@ -422,129 +423,128 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 
     /* LB21a (as of 6.1.0): HL (HY | BA) × [^ CB] */
     if (str != NULL && str->gclen) {
-	for (i = 0, j = 0; i < str->len; i++) {
+	propval_t lbc;
+
+	for (i = 0; i < str->gclen; i++) {
 	    /* HL */
-	    if (linebreak_lbclass(lbobj, str->str[i]) == LB_HL)
+	    if ((lbc = gcstring_lbclass(str, i)) == LB_HL &&
+		gcstring_lbclass_ext(str, i) == lbc)
+		/* avoid non-CM grapheme extenders */
 		i++;
 	    else
 		continue;
-
 	    /* CM* */
-	    while (i < str->len &&
-		   linebreak_lbclass(lbobj, str->str[i]) == LB_CM)
+	    while (i < str->gclen && gcstring_lbclass(str, i) == LB_CM)
 		i++;
-	    if (str->len <= i)
+	    if (str->gclen <= i)
 		break;
 
 	    /* (HY|BA) */
-	    if (linebreak_lbclass(lbobj, str->str[i]) == LB_HY ||
-		linebreak_lbclass(lbobj, str->str[i]) == LB_BA)
+	    if (((lbc = gcstring_lbclass(str, i)) == LB_HY ||
+		 lbc == LB_BA) && gcstring_lbclass_ext(str, i) == lbc)
+		/* avoid non-CM grapheme extenders */
 		i++;
 	    else
 		continue;
-
 	    /* CM* */
-	    while (i < str->len &&
-		   linebreak_lbclass(lbobj, str->str[i]) == LB_CM)
+	    while (i < str->gclen && gcstring_lbclass(str, i) == LB_CM)
 		i++;
-	    if (str->len <= i)
+	    if (str->gclen <= i)
 		break;
 
 	    /* [^CB] */
-	    switch (linebreak_lbclass(lbobj, str->str[i])) {
+	    switch (gcstring_lbclass(str, i)) {
 	    /* prohibit break by default */
-	    case LB_BK: /* LB6 */
+	    case LB_BK:	/* LB6 */
 	    case LB_CR:
 	    case LB_LF:
 	    case LB_NL:
-	    case LB_SP: /* LB7 */
+	    case LB_SP:	/* LB7 */
 	    case LB_ZW:
-	    case LB_CM: /* LB9 */
-	    case LB_WJ: /* LB11 */
+	    case LB_CM:	/* LB9 */
+	    case LB_WJ:	/* LB11 */
 	    /* allow break by default */
-	    case LB_CB: /* LB20 */
+	    case LB_CB:	/* LB20 */
 		continue;
 	    }
 
-	    while (str->gcstr[j].idx < i)
-		j++;
-	    if (str->gcstr[j].idx == i && ! str->gcstr[j].flag)
-		str->gcstr[j].flag = LINEBREAK_FLAG_PROHIBIT_BEFORE;
+	    if (!str->gcstr[i].flag)
+		str->gcstr[i].flag = LINEBREAK_FLAG_PROHIBIT_BEFORE;
 	}
     }
 
     /* LB25: not break in (PR|PO)? (OP|HY)? NU (NU|SY|IS)* (CL|CP)? (PR|PO)? */
+    /* FIXME:Avoid non-CM grapheme extenders */
     if (str != NULL && str->gclen) {
-        size_t st, et;
-        for (i = 0, j = 0; i < str->len; i++) {
-	    st = et = (size_t)-1;
+	size_t st, et;
+
+	for (i = 0; i < str->gclen; i++) {
+	    st = et = (size_t) - 1;
 
 	    /* (PR|PO)? */
-	    switch (linebreak_lbclass(lbobj, str->str[i])) {
+	    switch (gcstring_lbclass(str, i)) {
 	    case LB_PR:
 	    case LB_PO:
-		if (st == (size_t)-1)
+		if (st == (size_t) - 1)
 		    st = i;
-	    LB25_PRPO_PREFIX:
+	      LB25_PRPO_PREFIX:
 		i++;
 		/* CM* */
-		while (i < str->len &&
-		       linebreak_lbclass(lbobj, str->str[i]) == LB_CM)
+		while (i < str->gclen && gcstring_lbclass(str, i) == LB_CM)
 		    i++;
-		if (str->len <= i)
+		if (str->gclen <= i)
 		    goto LB25_BREAK;
 	    }
 
 	    /* (OP|HY)? */
-	    switch (linebreak_lbclass(lbobj, str->str[i])) {
+	    switch (gcstring_lbclass(str, i)) {
 	    case LB_OP:
 	    case LB_HY:
-		if (st == (size_t)-1)
+		if (st == (size_t) - 1)
 		    st = i;
-	    LB25_OPHY_PREFIX:
+	      LB25_OPHY_PREFIX:
 		i++;
 		/* CM* */
-		while (i < str->len &&
-		       linebreak_lbclass(lbobj, str->str[i]) == LB_CM)
+		while (i < str->gclen && gcstring_lbclass(str, i) == LB_CM)
 		    i++;
-		if (str->len <= i) {
+		if (str->gclen <= i) {
 		    if (eot)
 			goto LB25_BREAK;
 		    else
-			goto LB25_FOUND; /* save possible partial sequence. */
+			goto LB25_FOUND;	/* save possible partial sequence. */
 		}
 	    }
 
 	    /* NU (NU|SY|IS)* */
-	    switch (linebreak_lbclass(lbobj, str->str[i])) {
+	    switch (gcstring_lbclass(str, i)) {
 	    case LB_NU:
-		if (st == (size_t)-1)
+		if (st == (size_t) - 1)
 		    st = i;
 		i++;
 		/* (NU|SY|IS|CM)* */
-		while (i < str->len)
-		    switch (linebreak_lbclass(lbobj, str->str[i])) {
+		while (i < str->gclen)
+		    switch (gcstring_lbclass(str, i)) {
 		    case LB_NU:
 		    case LB_SY:
 		    case LB_IS:
 		    case LB_CM:
-		        i++;
+			i++;
 			break;
 
 		    /* (CL|CP) */
 		    case LB_CL:
 		    case LB_CP:
-		        goto LB25_CLCP_SUFFIX;
+			goto LB25_CLCP_SUFFIX;
 
 		    /* (PR|PO) */
 		    case LB_PR:
 		    case LB_PO:
-		        goto LB25_PRPO_SUFFIX;
+			goto LB25_PRPO_SUFFIX;
 
 		    default:
-		        goto LB25_FOUND;
+			goto LB25_FOUND;
 		    }
-		if (str->len <= i)
+		if (str->gclen <= i)
 		    goto LB25_FOUND;
 		break;
 
@@ -562,46 +562,42 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		continue;
 	    }
 
-            /* (CL|CP)? */
-	    switch (linebreak_lbclass(lbobj, str->str[i])) {
+	    /* (CL|CP)? */
+	    switch (gcstring_lbclass(str, i)) {
 	    case LB_CL:
 	    case LB_CP:
-	    LB25_CLCP_SUFFIX:
+	      LB25_CLCP_SUFFIX:
 		i++;
 		/* CM* */
-		while (i < str->len &&
-		       linebreak_lbclass(lbobj, str->str[i]) == LB_CM)
+		while (i < str->gclen && gcstring_lbclass(str, i) == LB_CM)
 		    i++;
-		if (str->len <= i)
+		if (str->gclen <= i)
 		    goto LB25_FOUND;
 	    }
 
-            /* (PR|PO)? */
-	    switch (linebreak_lbclass(lbobj, str->str[i])) {
+	    /* (PR|PO)? */
+	    switch (gcstring_lbclass(str, i)) {
 	    case LB_PR:
 	    case LB_PO:
-	    LB25_PRPO_SUFFIX:
+	      LB25_PRPO_SUFFIX:
 		et = i;
 		i++;
 		/* CM* */
-		while (i < str->len &&
-		       linebreak_lbclass(lbobj, str->str[i]) == LB_CM)
+		while (i < str->gclen && gcstring_lbclass(str, i) == LB_CM)
 		    i++;
-		if (str->len <= i)
+		if (str->gclen <= i)
 		    goto LB25_FOUND;
 	    }
 
 	  LB25_FOUND:
 	    for (st++; st < i; st++) {
-		while (str->gcstr[j].idx < st)
-		    j++;
-		if (str->gcstr[j].idx == st && ! str->gcstr[j].flag)
-		    str->gcstr[j].flag = LINEBREAK_FLAG_PROHIBIT_BEFORE;
+		if (!str->gcstr[st].flag)
+		    str->gcstr[st].flag = LINEBREAK_FLAG_PROHIBIT_BEFORE;
 	    }
 	    /* match may be overwrapped */
-	    if (et != (size_t)-1) {
+	    if (et != (size_t) - 1) {
 		i = st = et;
-		et = (size_t)-1;
+		et = (size_t) - 1;
 		goto LB25_PRPO_PREFIX;
 	    }
 	}
@@ -672,7 +668,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 
 	/* Go ahead reading input. */
 	while (!gcstring_eos(str)) {
-	    lbc = str->gcstr[str->pos].lbc;
+	    lbc = gcstring_lbclass(str, str->pos);
 
 	    /**
 	     ** Append SP/ZW/eop to ``before'' buffer.
@@ -686,7 +682,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		bSpc++;
 
 		/* End of input. */
-		continue; /* while (!gcstring_eos(str)) */
+		continue;	/* while (!gcstring_eos(str)) */
 
 	    /* - Mandatory breaks */
 
@@ -697,7 +693,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 	    case LB_NL:
 		gcstring_next(str);
 		bSpc++;
-		goto last_CHARACTER_PAIR; /* while (!gcstring_eos(str)) */
+		goto last_CHARACTER_PAIR;	/* while (!gcstring_eos(str)) */
 
 	    /* - Explicit breaks and non-breaks */
 
@@ -709,7 +705,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		bSpc = 0;
 
 		/* End of input */
-		continue; /* while (!gcstring_eos(str)) */
+		continue;	/* while (!gcstring_eos(str)) */
 	    }
 
 	    /**
@@ -729,7 +725,8 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 	     * where X is anything except BK, CR, LF, NL, SP or ZW
 	     * (NB: Some CM characters may be single grapheme cluster
 	     * since they have Grapheme_Cluster_Break property Control.) */
-	    while (!gcstring_eos(str) && str->gcstr[str->pos].lbc == LB_CM) {
+	    while (!gcstring_eos(str) &&
+		   gcstring_lbclass(str, str->pos) == LB_CM) {
 		gcstring_next(str);
 		aCM++;
 	    }
@@ -738,14 +735,14 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 
 	    /* LB2: sot × */
 	    if (0 < bLen || 0 < bSpc)
-		break; /* while (!gcstring_eos(str)) */
+		break;		/* while (!gcstring_eos(str)) */
 
 	    /* shift buffers. */
 	    bLen = str->pos - bBeg;
 	    bSpc = 0;
 	    bCM = aCM;
 	    aCM = 0;
-	} /* while (!gcstring_eos(str)) */
+	}			/* while (!gcstring_eos(str)) */
       last_CHARACTER_PAIR:
 
 	/***
@@ -754,12 +751,12 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 
 	/* Mandatory break. */
 	if (0 < bSpc &&
-	    (lbc = str->gcstr[bBeg + bLen + bSpc - 1].lbc) != LB_SP &&
-	    (lbc != LB_CR || eot || !gcstring_eos(str))) {
+	    (lbc = gcstring_lbclass(str, bBeg + bLen + bSpc - 1)) != LB_SP
+	    && (lbc != LB_CR || eot || !gcstring_eos(str))) {
 	    /* CR at end of input may be part of CR LF therefore not be eop. */
 	    action = LINEBREAK_ACTION_MANDATORY;
-	/* LB11, LB12 and tailorable rules LB13 - LB31.
-	 * Or urgent breaking. */
+	    /* LB11, LB12 and tailorable rules LB13 - LB31.
+	     * Or urgent breaking. */
 	} else if (bBeg + bLen + bSpc < str->pos) {
 	    if (str->gcstr[bBeg + bLen + bSpc].flag &
 		LINEBREAK_FLAG_ALLOW_BEFORE)
@@ -777,15 +774,25 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		size_t btail;
 
 		if (bLen == 0)
-		    btail = bBeg + bSpc - 1; /* before buffer is SP only. */
+		    btail = bBeg + bSpc - 1;	/* before buffer is SP only. */
 		else
-		    btail = bBeg + bLen - bCM - 1; /* LB9 */
+		    btail = bBeg + bLen - bCM - 1;	/* LB9 */
 
-		if ((blbc = str->gcstr[btail].elbc) == PROP_UNKNOWN)
-		    blbc = str->gcstr[btail].lbc;
+		blbc = gcstring_lbclass_ext(str, btail);
 		switch (blbc) {
-		/* LB1: SA is resolved to AL
-		 * (AI, CJ, SG and XX are already resolved). */
+		/* (SG and XX are already resolved). */
+		/* LB1: Resolve AI and CJ. */
+		case LB_AI:
+		    blbc = (lbobj->options &
+			    LINEBREAK_OPTION_EASTASIAN_CONTEXT) ?
+			LB_ID : LB_AL;
+		    break;
+		case LB_CJ:
+		    blbc = (lbobj->options &
+			    LINEBREAK_OPTION_NONSTARTER_LOOSE) ?
+			LB_ID : LB_NS;
+		    break;
+		/* LB1: SA is resolved to AL. */
 		case LB_SA:
 		    blbc = LB_AL;
 		    break;
@@ -808,10 +815,21 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		    break;
 		}
 
-		albc = str->gcstr[bBeg + bLen + bSpc].lbc;
+		albc = gcstring_lbclass(str, bBeg + bLen + bSpc);
 		switch (albc) {
-		/* LB1: SA is resolved to AL
-		 * (AI, CJ, SG and XX are already resolved). */
+		/* (SG and XX are already resolved). */
+		/* LB1: Resolve AI and CJ. */
+		case LB_AI:
+		    albc = (lbobj->options &
+			    LINEBREAK_OPTION_EASTASIAN_CONTEXT) ?
+			LB_ID : LB_AL;
+		    break;
+		case LB_CJ:
+		    albc = (lbobj->options &
+			    LINEBREAK_OPTION_NONSTARTER_LOOSE) ?
+			LB_ID : LB_NS;
+		    break;
+		/* LB1: SA is resolved to AL. */
 		case LB_SA:
 		    albc = LB_AL;
 		    break;
@@ -871,25 +889,25 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 			} else
 			    chars += broken->gcstr[broken->pos].len;
 			gcstring_next(broken);
-		    } /* while (!gcstring_eos(broken)) */
+		    }		/* while (!gcstring_eos(broken)) */
 
 		    urgEnd = broken->gclen;
 		    gcstring_replace(str, 0, str->pos, broken);
 		    gcstring_DESTROY(broken);
 		    str->pos = 0;
 		    bBeg = bLen = bCM = bSpc = aCM = 0;
-		    continue; /* while (1) */
-		} /* if (urgEnd < ...) */
+		    continue;	/* while (1) */
+		}
 
+		/* if (urgEnd < ...) */
 		/* Otherwise, fragments may be conjuncted safely. Read more. */
 		bLen = str->pos - bBeg;
 		bSpc = 0;
 		bCM = aCM;
 		aCM = 0;
-		continue; /* while (1) */
-	    } /* if (action == LINEBREAK_ACTION_PROHIBITED || ...) */
-	} /* if (0 < bSpc && ...) */
-
+		continue;	/* while (1) */
+	    }			/* if (action == ...) */
+	}			/* if (0 < bSpc && ...) */
 	/***
 	 *** Check end of input.
 	 ***/
@@ -934,7 +952,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 
 	IF_NULL_THEN_ABORT(beforeFrg = gcstring_substr(str, bBeg, bLen));
 
-	if (state == LINEBREAK_STATE_NONE) { /* sot undone. */
+	if (state == LINEBREAK_STATE_NONE) {	/* sot undone. */
 	    /* Process start of text. */
 	    IF_NULL_THEN_ABORT(fmt = _format(lbobj, LINEBREAK_STATE_SOT,
 					     beforeFrg));
@@ -955,13 +973,13 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		gcstring_DESTROY(fmt);
 		gcstring_DESTROY(beforeFrg);
 
-		continue; /* while (1) */
+		continue;	/* while (1) */
 	    }
 	    gcstring_DESTROY(fmt);
 	    state = LINEBREAK_STATE_SOL;
 	} else if (state == LINEBREAK_STATE_SOT_FORMAT)
 	    state = LINEBREAK_STATE_SOL;
-	else if (state == LINEBREAK_STATE_SOT) { /* sop undone. */
+	else if (state == LINEBREAK_STATE_SOT) {	/* sop undone. */
 	    /* Process start of paragraph. */
 	    IF_NULL_THEN_ABORT(fmt = _format(lbobj, LINEBREAK_STATE_SOP,
 					     beforeFrg));
@@ -982,7 +1000,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		gcstring_DESTROY(fmt);
 		gcstring_DESTROY(beforeFrg);
 
-		continue; /* while (1) */
+		continue;	/* while (1) */
 	    }
 	    gcstring_DESTROY(fmt);
 	    state = LINEBREAK_STATE_SOP;
@@ -1034,7 +1052,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 		    gcstring_DESTROY(broken);
 
 		    gcstring_DESTROY(beforeFrg);
-		    continue; /* while (1) */
+		    continue;	/* while (1) */
 		}
 	    }
 
@@ -1094,7 +1112,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 	    gcstring_DESTROY(s);
 
 	    bufCols = newcols;
-	} /* if (0 < lbobj->colmax && lbobj->colmax < newcols) */
+	}			/* if (0 < lbobj->colmax ... ) */
 
 	gcstring_DESTROY(beforeFrg);
 
@@ -1102,7 +1120,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 	 *** Mandatory break or end-of-text.
 	 ***/
 	if (eot && str->gclen <= bBeg + bLen + bSpc)
-	    break; /* while (1) */
+	    break;		/* while (1) */
 
 	if (action == LINEBREAK_ACTION_MANDATORY) {
 	    /* Process mandatory break. */
@@ -1137,7 +1155,7 @@ gcstring_t **_break_partial(linebreak_t * lbobj, unistr_t * input,
 	bSpc = 0;
 	bCM = aCM;
 	aCM = 0;
-    } /* while (1) */
+    }				/* while (1) */
 
     /***
      *** Process end of text.
@@ -1303,7 +1321,7 @@ gcstring_t **linebreak_break(linebreak_t * lbobj, unistr_t * input)
  * If internal error occurred, lbobj->errnum is set then NULL is returned.
  */
 gcstring_t **linebreak_break_from_utf8(linebreak_t * lbobj,
-				       char * input, size_t len, int check)
+				       char *input, size_t len, int check)
 {
     unistr_t unistr = { NULL, 0 };
     gcstring_t **ret;
@@ -1320,3 +1338,14 @@ gcstring_t **linebreak_break_from_utf8(linebreak_t * lbobj,
     return ret;
 }
 
+void linebreak_free_result(gcstring_t ** result, int deep)
+{
+    size_t i;
+
+    if (result == NULL)
+	return;
+    if (deep)
+	for (i = 0; result[i] != NULL; i++)
+	    gcstring_destroy(result[i]);
+    free(result);
+}
