@@ -47,6 +47,9 @@ ja-k.in
 ko.in
 ko.out
     Korean
+ko-decomp.in
+ko-decomp.out
+    Korean (NFD)
 ru.in
 ru.out
     Russian

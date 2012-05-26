@@ -1,10 +1,23 @@
-2.2.0  2012-04-XX
+2.2.1  2012-04-11
+	* lib/gcstring.c:
+	  - Treat an isolated hangul jamo as wide, though some of them
+	    are assigned EAW neutral (N).  cf. the discussion:
+	    http://lists.w3.org/Archives/Public/public-i18n-cjk/2011JanMar/thread.html#msg55
+	* REAME:
+	* README.ja_JP:
+	  - About naming.
+
+2.2.0  2012-04-02
 	* data/constants.pl:
 	* data/data.pl:
 	  - NEW: added custom Grapheme_Cluster_Break property value
 	    "ZWJ", U+200C ZERO WIDTH JOINER or U+200D ZERO WIDTH
 	    NON-JOINER.  They are lb:CM and gb:Extend but aren't gc:M
 	    so do not affect to Legacy-CM rule.
+	* tests/01break.t:
+	  - Added Korean (NFD) test.
+	* tests/03ns.t:
+	  - Added loose nonstarter test.
 
 2.2.0beta  2012-03-30
 	* License Change:
