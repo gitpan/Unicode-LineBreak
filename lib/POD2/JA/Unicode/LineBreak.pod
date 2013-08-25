@@ -2,7 +2,7 @@
 
 =head1 NAME
 
-Unicode::LineBreak::JA_JP - UAX #14 Unicode 行分割アルゴリズム
+Unicode::LineBreak~[ja] - UAX #14 Unicode 行分割アルゴリズム
 
 =head1 SYNOPSIS
 
@@ -101,6 +101,8 @@ I<関数>。
 
 =back
 
+=begin comment
+
 =head3 廃止予定のメソッド
 
 =over 4
@@ -127,11 +129,13 @@ L<Unicode::GCString/columns> を使ってほしい。
 
 =back
 
+=end comment
+
 =head2 オプション
 
 L</new>、L</config> の両メソッドには以下の対を指定できる。
 桁数の算出 ([B<E>])、書記素クラスタ分節 ([B<G>])
-(L<Unicode::GCString::JA_JP> も参照)、行分割動作 ([B<L>])
+(L<Unicode::GCString|POD2::JA::Unicode::GCString> も参照)、行分割動作 ([B<L>])
 に影響するものがある。
 
 =over 4
@@ -368,6 +372,8 @@ B<注>:
 
 =back
 
+=begin comment
+
 =head3 旧式なオプション
 
 =over 4
@@ -385,6 +391,8 @@ L</LBClass> の旧式な形式。
 L</Prep> の旧式な形式。
 
 =back
+
+=end comment
 
 =head2 定数
 
@@ -466,7 +474,7 @@ SELF は Unicode::LineBreak オブジェクト、EVENT はサブルーチンが�
 
 B<注意>:
 文字列の引数は実際には書記素クラスタ列である。
-L<Unicode::GCString::JA_JP> 参照。
+L<Unicode::GCString|POD2::JA::Unicode::GCString> 参照。
 
 たとえば次のコードは、行末の空白を取り除いて行折りをする。
 
@@ -492,7 +500,7 @@ SELF は Unicode::LineBreak オブジェクト、STR は分割すべき Unicode 
 
 B<注意>:
 文字列の引数は実際には書記素クラスタ列である。
-L<Unicode::GCString::JA_JP> 参照。
+L<Unicode::GCString|POD2::JA::Unicode::GCString> 参照。
 
 たとえば次のコードは、若干の化学物質 (チチンのような) の名称にハイフンを挿入し、行折りできるようにする。
 
@@ -568,7 +576,7 @@ SELF は Unicode::LineBreak オブジェクト、LEN は先行する文字列の
 
 B<注意>:
 文字列の引数は実際には書記素クラスタ列である。
-L<Unicode::GCString::JA_JP> 参照。
+L<Unicode::GCString|POD2::JA::Unicode::GCString> 参照。
 
 たとえば次のコードは、行に 8 桁ごとのタブストップがあるものとして処理する。
 
@@ -681,7 +689,23 @@ U+303C ます記号。
 
 =head4 和字間隔
 
-I<未稿>.
+=over 4
+
+=item C<IDEOGRAPHIC_SPACE() =E<gt> LB_BA>
+
+U+3000 和字間隔が行頭に来ないようにする。
+これが初期の挙動である。
+
+=item C<IDEOGRAPHIC_SPACE() =E<gt> LB_ID>
+
+和字間隔が行頭に来ることがある。
+Unicode 6.2以前はこれが初期の挙動であった。
+
+=item C<IDEOGRAPHIC_SPACE() =E<gt> LB_SP>
+
+和字間隔が行頭に来ず、行末でははみ出すようにする。
+
+=back
 
 =head3 East_Asian_Width 特性
 
@@ -760,7 +784,7 @@ L<Unicode::GCString/lbc> や L<Unicode::GCString/lbcext>
 
 =head2 標準への適合性
 
-このモジュールで用いている文字の特性値は、Unicode 標準 6.2.0版による。
+このモジュールで用いている文字の特性値は、Unicode 標準 6.3.0版のベータ版による。
 
 このモジュールでは、実装水準 UAX14-C2 を実装しているつもり。
 
@@ -804,6 +828,7 @@ SG や XX に分類される文字は AL に解決する。
 
     範囲               | UAX #14    | UAX #11    | 説明
     -------------------------------------------------------------
+    U+20A0..U+20CF     | PR [*1}    | N [*2]     | 通貨記号
     U+3400..U+4DBF     | ID         | W          | CJK漢字
     U+4E00..U+9FFF     | ID         | W          | CJK漢字
     U+D800..U+DFFF     | AL (SG)    | N          | サロゲート
@@ -816,6 +841,10 @@ SG や XX に分類される文字は AL に解決する。
     その他未割り当て   | AL (XX)    | N          | 未割り当て、
                        |            |            | 予約、非文字
     -------------------------------------------------------------
+    [*1] U+20A7 ペセタ記号 (PO)、U+20B6 トゥール・リーヴル記号 
+      (PO) を除く。
+    [*2] U+20A9 ウォン記号 (H)、U+20AC ユーロ記号 (F か N (A)) を
+      除く。
 
 =item *
 
@@ -863,21 +892,23 @@ L<http://unicode.org/reports/tr11/>.
 
 =item [UAX #14]
 
-A. Freytag and A. Heninger (2008-2012).
-I<Unicode Standard Annex #14: Unicode Line Breaking Algorithm>, Revisions 22-30.
+A. Freytag and A. Heninger (2008-2013).
+I<Unicode Standard Annex #14: Unicode Line Breaking Algorithm>, Revisions 22-31.
 L<http://unicode.org/reports/tr14/>.
 
 =item [UAX #29]
 
-Mark Davis (2009-2012).
-I<Unicode Standard Annex #29: Unicode Text Segmentation>, Revisions 15-21.
+Mark Davis (2009-2013).
+I<Unicode Standard Annex #29: Unicode Text Segmentation>, Revisions 15-22.
 L<http://www.unicode.org/reports/tr29/>.
 
 =back
 
 =head1 SEE ALSO
 
-L<Text::LineFold::JA_JP>, L<Text::Wrap>, L<Unicode::GCString::JA_JP>.
+L<Text::LineFold|POD2::JA::Text::LineFold>,
+L<Text::Wrap>,
+L<Unicode::GCString|POD2::JA::Unicode::GCString>.
 
 =head1 AUTHOR
 

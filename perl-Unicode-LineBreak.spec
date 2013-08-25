@@ -1,5 +1,5 @@
 %define module  Unicode-LineBreak
-%define version 2013.004_26
+%define version 2013.008_06
 %define release 1%{?dist}
 %define sombok_version 2.3.0
 %define sombok_max_version 2.99.99
