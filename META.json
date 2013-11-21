@@ -45,8 +45,8 @@
          "http://dev.perl.org/licenses/"
       ],
       "repository" : {
-         "url" : "http://hatuka.nezumi.nu/repos/Unicode-LineBreak/"
+         "url" : "https://github.com/hatukanezumi/Unicode-LineBreak/"
       }
    },
-   "version" : "2013.10"
+   "version" : "2013.11"
 }
