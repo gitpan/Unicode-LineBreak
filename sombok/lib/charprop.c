@@ -128,7 +128,7 @@ _search_props(linebreak_t * obj, unichar_t c, propval_t * lbcptr,
  * @return none.
  *
  * @note As of 2.2.0, LINEBREAK_OPTION_EASTASIAN_CONTEXT and
- * LINEBREAK_OPTION_NONSTARTER_LOOSE are not affect.
+ * LINEBREAK_OPTION_NONSTARTER_LOOSE do not affect.
  */
 void
 linebreak_charprop(linebreak_t * obj, unichar_t c,
