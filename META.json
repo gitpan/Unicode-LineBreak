@@ -39,7 +39,7 @@
          }
       }
    },
-   "release_status" : "testing",
+   "release_status" : "stable",
    "resources" : {
       "license" : [
          "http://dev.perl.org/licenses/"
@@ -48,5 +48,5 @@
          "url" : "https://github.com/hatukanezumi/Unicode-LineBreak/"
       }
    },
-   "version" : "2014.004_26"
+   "version" : "2014.06"
 }
